@@ -63,8 +63,8 @@ export class IndexerService {
         const neynarUserInfo = await this.getNeynarUserInfo(voteData.fid);
 
         // Extract user data from Neynar response
-        const username = neynarUserInfo?.username || `user_${voteData.fid}`;
-        const photoUrl = neynarUserInfo?.pfp_url || '';
+        const username = neynarUserInfo?.username;
+        const photoUrl = neynarUserInfo?.pfp_url;
         const neynarScore =
           neynarUserInfo?.score ||
           neynarUserInfo?.experimental?.neynar_user_score ||
@@ -164,9 +164,6 @@ export class IndexerService {
         return;
       }
 
-      // Calculate reward amount (cost * 10)
-      const rewardAmount = (BigInt(voteData.cost) * BigInt(10)).toString();
-
       // Calculate day from timestamp (block.timestamp / 86400)
       const day = Math.floor(timestamp / 86400);
       // Calculate brndPaid right away based on user's brndPowerLevel
@@ -202,9 +199,9 @@ export class IndexerService {
         default:
           brndPaid = 0;
       }
-      // Create the vote record (let TypeORM generate the UUID)
+      // Create the vote record
       const vote = this.userBrandVotesRepository.create({
-        // Don't set id - let TypeORM generate UUID
+        id: voteData.transactionHash, // Use transaction hash as id
         user: { id: user.id },
         brand1: { id: voteData.brandIds[0] },
         brand2: { id: voteData.brandIds[1] },
@@ -223,21 +220,59 @@ export class IndexerService {
       logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
 
       // Update brand scores (60, 30, 10 points for 1st, 2nd, 3rd place)
+      // Update score, scoreWeek, and scoreMonth for all three brands
+      const score1 = 0.6 * vote.brndPaidWhenCreatingPodium;
+      const score2 = 0.3 * vote.brndPaidWhenCreatingPodium;
+      const score3 = 0.1 * vote.brndPaidWhenCreatingPodium;
+
       await Promise.all([
+        // 1st place brand
         this.brandRepository.increment(
           { id: voteData.brandIds[0] },
           'score',
-          0.6 * vote.brndPaidWhenCreatingPodium,
+          score1,
         ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[0] },
+          'scoreWeek',
+          score1,
+        ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[0] },
+          'scoreMonth',
+          score1,
+        ),
+        // 2nd place brand
         this.brandRepository.increment(
           { id: voteData.brandIds[1] },
           'score',
-          0.3 * vote.brndPaidWhenCreatingPodium,
+          score2,
         ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[1] },
+          'scoreWeek',
+          score2,
+        ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[1] },
+          'scoreMonth',
+          score2,
+        ),
+        // 3rd place brand
         this.brandRepository.increment(
           { id: voteData.brandIds[2] },
           'score',
-          0.1 * vote.brndPaidWhenCreatingPodium,
+          score3,
+        ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[2] },
+          'scoreWeek',
+          score3,
+        ),
+        this.brandRepository.increment(
+          { id: voteData.brandIds[2] },
+          'scoreMonth',
+          score3,
         ),
       ]);
 
@@ -497,6 +532,7 @@ export class IndexerService {
         // Use claim transaction hash as primary key since vote transaction doesn't exist
         // This is an edge case where claim came before vote (shouldn't normally happen)
         const placeholderVote = this.userBrandVotesRepository.create({
+          id: claimData.transactionHash, // Use transaction hash as id
           transactionHash: claimData.transactionHash, // Use claim tx hash as primary key
           user: { id: user.id },
           // These will be null since we don't have vote data

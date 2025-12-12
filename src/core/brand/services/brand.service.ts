@@ -1,7 +1,7 @@
 // Dependencies
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, MoreThan, Repository } from 'typeorm';
+import { In, IsNull, Like, MoreThan, Not, Repository } from 'typeorm';
 
 // Models
 import { Brand, UserBrandVotes } from '../../../models';
@@ -1013,6 +1013,9 @@ export class BrandService {
     const skip = (page - 1) * limit;
 
     const [podiums, count] = await this.userBrandVotesRepository.findAndCount({
+      where: {
+        transactionHash: Not(IsNull()),
+      },
       relations: [
         'user', // Get user info (username, photoUrl, etc.)
         'brand1', // 1st place brand

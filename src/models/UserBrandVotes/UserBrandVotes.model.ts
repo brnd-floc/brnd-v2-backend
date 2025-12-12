@@ -12,7 +12,7 @@ export class UserBrandVotes {
   @PrimaryColumn({ length: 66 })
   transactionHash: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, length: 66 })
   id: string;
 
   @ManyToOne('User', 'userBrandVotes')
