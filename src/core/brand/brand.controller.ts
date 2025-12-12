@@ -502,8 +502,8 @@ export class BrandController {
         }
 
         // Verify the cast contains the correct embed URL
-        // Accept both brnd.land or rebrnd.lat as valid base URLs in the embed
-        const validEmbedUrls = ['https://brnd.land', 'https://rebrnd.lat'];
+        // Accept both www.brnd.land or rebrnd.lat as valid base URLs in the embed
+        const validEmbedUrls = ['https://www.brnd.land', 'https://rebrnd.lat'];
 
         // Find embed that matches any of our valid URLs and has the url property
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {

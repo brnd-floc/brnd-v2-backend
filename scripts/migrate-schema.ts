@@ -70,7 +70,7 @@ async function applyNewSchema() {
       AirdropLeaf,
       RewardClaim,
     ],
-    synchronize: false, // Enable synchronize to create tables
+    synchronize: true, // Enable synchronize to create tables
     logging: false,
     ssl: newConfig.requireSSL
       ? {
@@ -89,6 +89,7 @@ async function applyNewSchema() {
     console.log(`  User: ${newConfig.username}`);
 
     // Initialize the connection
+    // With synchronize: true, TypeORM will automatically create tables during initialize()
     await dataSource.initialize();
     console.log('✓ Connected to new database');
 
@@ -100,9 +101,9 @@ async function applyNewSchema() {
       '    - New: airdrop_scores, airdrop_snapshots, airdrop_leaves, reward_claims',
     );
 
-    // The synchronize option in DataSource will automatically create tables
-    // We just need to ensure the connection is established
-    // TypeORM will create tables when synchronize is true and we call initialize()
+    // TypeORM's synchronize: true automatically creates tables during initialize()
+    // Small delay to ensure synchronization completes
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Verify tables were created by querying information_schema
     const queryRunner = dataSource.createQueryRunner();

@@ -45,7 +45,7 @@ export class EmbedsService {
         description: `${vote.user.username}'s BRND Podium`,
         imageUrl:
           'https://github.com/jpfraneto/images/blob/main/dynamic.png?raw=true',
-        targetUrl: `https://brnd.land`,
+        targetUrl: `https://www.brnd.land`,
       };
       return this.generateEmbedHtml(embedData, 'podium');
     } catch (error) {
@@ -100,7 +100,7 @@ export class EmbedsService {
         description: `${brand.description} | Score: ${brand.score} points | Category: ${brand.category?.name || 'General'}`,
         imageUrl:
           'https://github.com/jpfraneto/images/blob/main/dynamic.png?raw=true',
-        targetUrl: `https://brnd.land/brand/${brandId}`,
+        targetUrl: `https://www.brnd.land/brand/${brandId}`,
       };
 
       return this.generateEmbedHtml(embedData, 'brand');
@@ -189,7 +189,7 @@ export class EmbedsService {
         description: `Rank #${rank} with ${user.points} points | Join the competition and vote for your favorite brands!`,
         imageUrl:
           'https://github.com/jpfraneto/images/blob/main/dynamic.png?raw=true',
-        targetUrl: `https://brnd.land/leaderboard`,
+        targetUrl: `https://www.brnd.land/leaderboard`,
       };
 
       return this.generateEmbedHtml(embedData, 'leaderboard');
@@ -274,7 +274,7 @@ export class EmbedsService {
     <meta name="twitter:title" content="${embedData.title}">
     <meta name="twitter:description" content="${embedData.description}">
     <meta name="twitter:image" content="${embedData.imageUrl}">
-    <meta property="twitter:domain" content="brnd.land">
+    <meta property="twitter:domain" content="www.brnd.land">
     <meta property="twitter:url" content="${embedData.targetUrl}">
     
     <!-- Additional Meta Tags -->

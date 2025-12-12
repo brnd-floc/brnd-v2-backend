@@ -313,6 +313,9 @@ async function migrateData() {
           NULL,
           NULL,
           0,
+          NULL,
+          NULL,
+          NULL,
           ${formatDate(brand.createdAt || brand.created_at)},
           ${formatDate(brand.updatedAt || brand.updated_at)}
         )`;
@@ -327,7 +330,7 @@ async function migrateData() {
           banned, queryType, currentRanking, categoryId, walletAddress,
           totalBrndAwarded, availableBrnd, onChainCreatedAt, onChainId,
           onChainFid, onChainHandle, onChainWalletAddress, metadataHash,
-          isUploadedToContract, createdAt, updatedAt
+          isUploadedToContract, founderFid, ticker, contractAddress, createdAt, updatedAt
         ) VALUES ${values}
       `;
 
@@ -434,6 +437,7 @@ async function migrateData() {
             ${user.notificationsEnabled === true || user.notificationsEnabled === 1 ? '1' : '0'},
             ${escapeValue(user.notificationToken || user.notification_token)},
             ${formatDate(user.lastVoteReminderSent || user.last_vote_reminder_sent)},
+            0.0,
             ${formatDate(user.createdAt || user.created_at)},
             ${formatDate(user.updatedAt || user.updated_at)}
           )`;
@@ -447,7 +451,7 @@ async function migrateData() {
             brndPowerLevel, totalVotes, lastVoteDay, lastVoteTimestamp,
             address, banned, powerups, verified, favoriteBrandId,
             notificationsEnabled, notificationToken, lastVoteReminderSent,
-            createdAt, updatedAt
+            neynarScore, createdAt, updatedAt
           ) VALUES ${values}
         `;
 
@@ -621,6 +625,7 @@ async function migrateData() {
               ${escapeValue(vote.castHash)},
               NULL,
               NULL,
+              NULL,
               0,
               NULL,
               NULL,
@@ -634,7 +639,7 @@ async function migrateData() {
           const insertSQL = `
             INSERT INTO user_brand_votes (
               transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, shared, castHash,
-              rewardAmount, day, shareVerified, shareVerifiedAt,
+              brndPaidWhenCreatingPodium, rewardAmount, day, shareVerified, shareVerifiedAt,
               signatureGeneratedAt, nonce, claimedAt, claimTxHash
             ) VALUES ${values}
           `;
@@ -753,141 +758,100 @@ async function migrateData() {
       `);
       console.log('    ✓ Updated favoriteBrandId (using simpler query)');
 
-      // Step 7d: Calculate maxDailyStreak and dailyStreak
-      // We'll use a stored procedure approach or calculate in batches
-      // For now, let's use a simpler approach: calculate for each user individually
-      console.log('  7d. Calculating daily streak and max daily streak...');
+      // Step 7d: Calculate maxDailyStreak and dailyStreak using optimized SQL
+      // Using window functions for bulk calculation (much faster than per-user loops)
+      console.log(
+        '  7d. Calculating daily streak and max daily streak (optimized SQL)...',
+      );
 
-      // Get all users who have votes
-      const usersWithVotes = await queryRunner.query(`
-        SELECT DISTINCT userId as id
-        FROM user_brand_votes
-      `);
+      // Reset all streaks to 0 first
+      await queryRunner.query(
+        `UPDATE users SET dailyStreak = 0, maxDailyStreak = 0`,
+      );
 
-      let updatedCount = 0;
-      const batchSize = 100;
-
-      for (let i = 0; i < usersWithVotes.length; i += batchSize) {
-        const batch = usersWithVotes.slice(i, i + batchSize);
-
-        for (const user of batch) {
-          // Get unique voting days for this user (UTC days)
-          const voteDays = await queryRunner.query(
-            `
-            SELECT DISTINCT 
+      // Calculate streaks using window functions in a single query
+      await queryRunner.query(`
+        UPDATE users u
+        INNER JOIN (
+          WITH vote_days AS (
+            -- Get unique vote days per user (UTC dates)
+            SELECT DISTINCT
+              userId,
               DATE(CONVERT_TZ(date, @@session.time_zone, '+00:00')) as vote_date
             FROM user_brand_votes
-            WHERE userId = ?
-            ORDER BY vote_date ASC
-          `,
-            [user.id],
-          );
-
-          if (voteDays.length === 0) {
-            await queryRunner.query(
-              `
-              UPDATE users 
-              SET dailyStreak = 0, maxDailyStreak = 0
-              WHERE id = ?
-            `,
-              [user.id],
-            );
-            continue;
-          }
-
-          // Helper to parse date string to UTC date (handles both Date objects and strings)
-          const parseUTCDate = (dateValue: any): Date => {
-            const date =
-              dateValue instanceof Date ? dateValue : new Date(dateValue);
-            // Ensure it's treated as UTC
-            return new Date(
-              Date.UTC(
-                date.getUTCFullYear(),
-                date.getUTCMonth(),
-                date.getUTCDate(),
-              ),
-            );
-          };
-
-          // Calculate maxDailyStreak: find maximum consecutive days
-          let maxStreak = 1;
-          let currentStreak = 1;
-
-          for (let j = 1; j < voteDays.length; j++) {
-            const currentDate = parseUTCDate(voteDays[j].vote_date);
-            const prevDate = parseUTCDate(voteDays[j - 1].vote_date);
-            const daysDiff = Math.floor(
-              (currentDate.getTime() - prevDate.getTime()) /
-                (1000 * 60 * 60 * 24),
-            );
-
-            if (daysDiff === 1) {
-              // Consecutive day
-              currentStreak++;
-            } else {
-              // Gap found, update max and reset
-              maxStreak = Math.max(maxStreak, currentStreak);
-              currentStreak = 1;
-            }
-          }
-          maxStreak = Math.max(maxStreak, currentStreak);
-
-          // Calculate dailyStreak: consecutive days from most recent vote
-          // Most recent vote day (UTC)
-          const mostRecentDate = parseUTCDate(
-            voteDays[voteDays.length - 1].vote_date,
-          );
-          const today = new Date();
-          today.setUTCHours(0, 0, 0, 0);
-
-          const daysSinceLastVote = Math.floor(
-            (today.getTime() - mostRecentDate.getTime()) /
-              (1000 * 60 * 60 * 24),
-          );
-
-          let dailyStreak = 0;
-          if (daysSinceLastVote <= 1) {
-            // Count consecutive days backwards from most recent
-            dailyStreak = 1;
-            let expectedDate = new Date(mostRecentDate);
-
-            for (let j = voteDays.length - 2; j >= 0; j--) {
-              const voteDate = parseUTCDate(voteDays[j].vote_date);
-              expectedDate.setUTCDate(expectedDate.getUTCDate() - 1);
-
-              if (voteDate.getTime() === expectedDate.getTime()) {
-                dailyStreak++;
-              } else {
-                break;
-              }
-            }
-          }
-
-          // Update user with calculated values
-          await queryRunner.query(
-            `
-            UPDATE users 
-            SET dailyStreak = ?, maxDailyStreak = ?
-            WHERE id = ?
-          `,
-            [dailyStreak, maxStreak, user.id],
-          );
-
-          updatedCount++;
-        }
-
-        if (
-          (i + batchSize) % 1000 === 0 ||
-          i + batchSize >= usersWithVotes.length
-        ) {
-          console.log(
-            `    Processed ${Math.min(i + batchSize, usersWithVotes.length)}/${usersWithVotes.length} users...`,
-          );
-        }
-      }
+          ),
+          ranked_days AS (
+            -- Use LAG to find gaps between consecutive days
+            SELECT 
+              userId,
+              vote_date,
+              DATEDIFF(
+                vote_date, 
+                LAG(vote_date) OVER (PARTITION BY userId ORDER BY vote_date)
+              ) as gap
+            FROM vote_days
+          ),
+          streak_groups AS (
+            -- Create streak groups: each gap > 1 starts a new streak
+            SELECT 
+              userId,
+              vote_date,
+              SUM(CASE WHEN gap > 1 OR gap IS NULL THEN 1 ELSE 0 END) 
+                OVER (PARTITION BY userId ORDER BY vote_date) as streak_id
+            FROM ranked_days
+          ),
+          streak_lengths AS (
+            -- Calculate length of each streak
+            SELECT 
+              userId,
+              streak_id,
+              COUNT(*) as length,
+              MIN(vote_date) as start_date,
+              MAX(vote_date) as end_date
+            FROM streak_groups
+            GROUP BY userId, streak_id
+          ),
+          max_streaks AS (
+            -- Find maximum streak per user
+            SELECT 
+              userId,
+              MAX(length) as maxDailyStreak
+            FROM streak_lengths
+            GROUP BY userId
+          ),
+          current_streaks AS (
+            -- Find current streak (most recent streak if vote was today/yesterday)
+            SELECT 
+              s.userId,
+              s.length as dailyStreak
+            FROM streak_lengths s
+            INNER JOIN (
+              SELECT userId, MAX(end_date) as last_end
+              FROM streak_lengths
+              GROUP BY userId
+            ) last ON s.userId = last.userId AND s.end_date = last.last_end
+            INNER JOIN (
+              SELECT userId, MAX(vote_date) as most_recent
+              FROM vote_days
+              GROUP BY userId
+            ) recent ON s.userId = recent.userId
+            WHERE DATEDIFF(CURDATE(), recent.most_recent) <= 1
+          )
+          -- Combine results: max_streaks has all users with votes, current_streaks only has active streaks
+          SELECT 
+            m.userId,
+            m.maxDailyStreak,
+            COALESCE(c.dailyStreak, 0) as dailyStreak
+          FROM max_streaks m
+          LEFT JOIN current_streaks c ON m.userId = c.userId
+        ) streaks ON u.id = streaks.userId
+        SET 
+          u.maxDailyStreak = streaks.maxDailyStreak,
+          u.dailyStreak = streaks.dailyStreak
+      `);
 
       console.log(
-        `    ✓ Updated dailyStreak and maxDailyStreak for ${updatedCount} users`,
+        '    ✓ Updated dailyStreak and maxDailyStreak for all users (optimized)',
       );
 
       await queryRunner.release();
