@@ -39,6 +39,9 @@ export interface ClaimRewardResponse {
 export class RewardService {
   private readonly BASE_VOTE_COST = '100000000000000000000'; // 100 BRND in wei
   private readonly REWARD_MULTIPLIER = 10;
+  private readonly WEI_PER_BRND = BigInt(10 ** 18);
+  private readonly REWARD_MULTIPLIER_BIGINT = BigInt(10);
+  private readonly MIN_WEI_AMOUNT = BigInt(10 ** 18); // 1 BRND in wei
 
   constructor(
     @InjectRepository(UserBrandVotes)
@@ -47,6 +50,42 @@ export class RewardService {
     private readonly userRepository: Repository<User>,
     private readonly signatureService: SignatureService,
   ) {}
+
+  /**
+   * Extracts and validates reward amount from database value.
+   * If the stored value is too small (not in wei), recalculates from brndPaid.
+   */
+  private extractRewardAmount(
+    rewardAmount: string | null | undefined,
+    brndPaid?: number | null,
+  ): string {
+    if (!rewardAmount) {
+      return '0';
+    }
+
+    // Extract integer part if it has decimal places
+    let amount = rewardAmount.includes('.')
+      ? rewardAmount.split('.')[0]
+      : rewardAmount;
+
+    // Validate that the amount is in wei format (should be a very large number)
+    // If it's too small (like "1000"), it means it wasn't converted to wei
+    const amountBigInt = BigInt(amount);
+    if (amountBigInt < this.MIN_WEI_AMOUNT && brndPaid) {
+      // Recalculate if the stored value is too small
+      const recalculated = (
+        BigInt(brndPaid) *
+        this.WEI_PER_BRND *
+        this.REWARD_MULTIPLIER_BIGINT
+      ).toString();
+      logger.log(
+        `💰 [REWARD] Recalculated amount: ${recalculated} (from brndPaid: ${brndPaid}, original: ${amount})`,
+      );
+      return recalculated;
+    }
+
+    return amount;
+  }
 
   async getClaimStatus(fid: number, day: number): Promise<ClaimStatusResponse> {
     try {
@@ -67,8 +106,12 @@ export class RewardService {
       const hasClaimed = vote?.claimedAt != null;
       const shareVerified = vote?.shareVerified || false;
       const canClaim = shareVerified && !hasClaimed;
-      // Remove decimal part from rewardAmount (database returns decimal format)
-      const amount = vote?.rewardAmount ? vote.rewardAmount.split('.')[0] : '0';
+
+      // Extract and validate reward amount
+      const amount = this.extractRewardAmount(
+        vote?.rewardAmount,
+        vote?.brndPaidWhenCreatingPodium,
+      );
 
       return {
         canClaim,
@@ -114,10 +157,17 @@ export class RewardService {
         throw new Error(`Reward amount not found for vote on day ${day}`);
       }
 
-      // Convert decimal string to integer string (remove decimal part for wei amounts)
-      // Database returns decimal(64, 18) format like "1000000000000000000000.000000000000000000"
-      // We need just the integer part for BigInt conversion
-      const amount = vote.rewardAmount.split('.')[0];
+      // Extract and validate reward amount (handles wei conversion if needed)
+      const amount = this.extractRewardAmount(
+        vote.rewardAmount,
+        vote.brndPaidWhenCreatingPodium,
+      );
+
+      // Log for debugging
+      logger.log(
+        `💰 [REWARD] Reward amount - Raw: ${vote.rewardAmount}, Extracted: ${amount}, brndPaid: ${vote.brndPaidWhenCreatingPodium}`,
+      );
+
       const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour deadline
 
       const { signature, nonce } =
@@ -332,22 +382,30 @@ export class RewardService {
 
       const totalClaimed = claimedRewards
         .reduce((sum, vote) => {
-          // Remove decimal part from rewardAmount (database returns decimal format)
-          const amount = (vote.rewardAmount || '0').split('.')[0];
+          const amount = this.extractRewardAmount(
+            vote.rewardAmount,
+            vote.brndPaidWhenCreatingPodium,
+          );
           return sum + BigInt(amount);
         }, BigInt(0))
         .toString();
 
       const rewardHistory = claimedRewards.map((vote) => ({
         day: vote.day!,
-        amount: (vote.rewardAmount || '0').split('.')[0], // Remove decimal part
+        amount: this.extractRewardAmount(
+          vote.rewardAmount,
+          vote.brndPaidWhenCreatingPodium,
+        ),
         claimedAt: vote.claimedAt!.toISOString(),
         txHash: vote.claimTxHash || '',
       }));
 
       const pendingRewardsFormatted = pendingRewards.map((vote) => ({
         day: vote.day!,
-        amount: (vote.rewardAmount || '0').split('.')[0], // Remove decimal part
+        amount: this.extractRewardAmount(
+          vote.rewardAmount,
+          vote.brndPaidWhenCreatingPodium,
+        ),
         canClaim: vote.shareVerified || false,
         shareVerified: vote.shareVerified || false,
       }));

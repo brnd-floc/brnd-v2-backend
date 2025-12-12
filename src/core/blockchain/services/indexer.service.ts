@@ -199,6 +199,16 @@ export class IndexerService {
         default:
           brndPaid = 0;
       }
+      // Calculate reward amount in wei (brndPaid is in BRND units, convert to wei then multiply by 10)
+      // 1 BRND = 10^18 wei, so reward = brndPaid * 10^18 * 10 = brndPaid * 10^19
+      const WEI_PER_BRND = BigInt(10 ** 18);
+      const REWARD_MULTIPLIER = BigInt(10);
+      const rewardAmount = (
+        BigInt(brndPaid) *
+        WEI_PER_BRND *
+        REWARD_MULTIPLIER
+      ).toString();
+
       // Create the vote record
       const vote = this.userBrandVotesRepository.create({
         id: voteData.transactionHash, // Use transaction hash as id
@@ -211,7 +221,7 @@ export class IndexerService {
         castHash: null, // Keep null for now, will be populated when user shares
         transactionHash: voteData.transactionHash, // Store blockchain transaction hash
         brndPaidWhenCreatingPodium: brndPaid,
-        rewardAmount: (brndPaid * 10).toString(), // Store reward amount (cost * 10)
+        rewardAmount: rewardAmount, // Store reward amount in wei (cost * 10 in wei)
         day: day, // Store blockchain day
         shareVerified: false, // Will be updated when user shares
       });
