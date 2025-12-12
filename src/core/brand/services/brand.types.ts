@@ -1,0 +1,19 @@
+import { Brand } from '../../../models/Brand';
+
+export type BrandOrderType = 'top' | 'new' | 'all';
+
+export type BrandCast = {
+  creator: string;
+  creatorPfp: string;
+  creatorPowerBadge: boolean;
+  text: string;
+  image?: string;
+  warpcastUrl: string;
+  hash: string;
+};
+
+export type BrandResponse = {
+  brand: Brand;
+  casts: BrandCast[];
+  fanCount: number;
+};

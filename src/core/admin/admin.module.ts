@@ -1,0 +1,31 @@
+// src/core/admin/admin.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+// Controllers
+import { AdminController } from './admin.controller';
+
+// Services
+import { AdminService } from './services/admin.service';
+
+// Models
+import { Brand, Category } from '../../models';
+
+// Other modules
+import { AuthModule } from '../auth/auth.module';
+import { BlockchainModule } from '../blockchain/blockchain.module';
+import { AirdropModule } from '../airdrop/airdrop.module';
+import { IpfsService } from '../../utils/ipfs.service';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Brand, Category]),
+    AuthModule,
+    BlockchainModule,
+    AirdropModule,
+  ],
+  controllers: [AdminController],
+  providers: [AdminService, IpfsService],
+  exports: [AdminService],
+})
+export class AdminModule {}

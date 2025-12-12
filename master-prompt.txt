@@ -1,0 +1,867 @@
+# BRND API - Farcaster Miniapp Backend - Master Context (Updated with Admin System)
+
+## Integration Points & External Services
+
+### Farcaster Platform Integration (Enhanced)
+```typescript
+// Miniapp lifecycle
+sdk.quickAuth.getToken()   // Get authentication token
+sdk.context               // Access user profile, permissions
+sdk.actions.ready()       // Signal initialization complete
+sdk.actions.addMiniApp()  // Prompt user to add miniapp (for notifications)
+sdk.actions.composeCast() // Share content with embeds
+
+// Webhook integration
+POST /notification-service/webhook // Handle Farcaster events
+- frame_added/removed events
+- notification enable/disable events
+- JFS signature verification
+- User preference management
+
+// Embed integration
+- Dynamic meta tag generation for rich previews
+- Frame metadata with launch_frame actions
+- Image URL pointing to server-generated visuals
+- Viral sharing loop through composeCast API
+```
+
+### Neynar API Integration
+```typescript
+// Real-time Farcaster content
+getTrendingCastInAChannel(channelName)  // Channel-based content
+getTrendingCastInAProfile(username)     // Profile-based content
+getChannelFollowerCount(channelName)    // Channel follower metrics
+getProfileFollowerCount(username)       // Profile follower metrics
+// Returns: creator info, cast text, images, engagement data
+```
+
+## Admin System Architecture (NEW)
+
+### Admin Authentication & Authorization
+```typescript
+// Admin FID validation
+const adminFids = [39278, 16098]; // Authorized admin user FIDs
+// No separate login - uses Farcaster QuickAuth with FID checking
+// All admin routes protected with FID verification middleware
+```
+
+### Admin API Endpoints
+```typescript
+// Brand Management
+GET    /admin-service/brands                    // List all brands with search & pagination
+POST   /admin-service/brands                    // Create new brand
+PUT    /admin-service/brands/:id               // Update existing brand
+DELETE /admin-service/brands/:id               // Delete brand
+POST   /admin-service/brands/:id/refresh-followers // Refresh Neynar follower count
+POST   /admin-service/brands/bulk-refresh-followers // Bulk follower refresh
+
+// Category Management
+GET    /admin-service/categories               // List all categories (auto-creates if needed)
+
+// Admin endpoints follow same patterns as brand-service
+// Full logging, error handling, and response formatting
+```
+
+### Admin Frontend Components
+```typescript
+// Admin Panel (/admin route)
+- Gradient background with glassmorphism design
+- FID-based access control (only shows admin button for authorized users)
+- Modal-based form system for brand creation/editing
+- Real-time brand search and selection
+- Three-step flow: Menu → Form → Confirmation
+
+// Form Features
+- Live image preview for logo URLs
+- Smart profile/channel handling (auto-formats @username, /channel)
+- Validation with visual error highlighting and shake animations
+- Dynamic field labels based on query type (Channel vs Profile)
+- Auto-population when editing existing brands
+
+// Visual Design
+- Modern gradient backgrounds (purple/blue)
+- Glass-morphism effects with backdrop blur
+- Smooth animations and hover states
+- Mobile-responsive modal system
+- Professional color scheme with white cards
+```
+
+### Admin Business Logic Integration
+```typescript
+// Synchronized with Brand Seeding Service
+- Same profile/channel processing logic as seeding
+- Auto-creates categories if they don't exist (fallback: "General")
+- Handles warpcastUrl fallbacks and URL validation
+- Automatic follower count fetching from Neynar API
+- Proper field initialization (all scoring fields set to 0)
+
+// Enhanced Features Beyond Seeding
+- Live follower count refresh capability
+- Bulk operations for multiple brands
+- Visual brand management interface
+- Real-time form validation and feedback
+- Seamless integration with existing brand system
+```
+
+## Deployment & Environment Considerations
+
+### Environment Configuration (Enhanced)
+```typescript
+// Config management with notification, embed, and admin support
+getConfig() returns {
+  runtime: { port: number },
+  session: { key: string, domain: string },
+  database: { connection details },
+  notifications: {
+    enabled: boolean,                    // Global notification toggle
+    baseUrl: string,                     // Miniapp base URL
+    dailyReminderHour: number,           // Daily reminder time (UTC)
+    eveningReminderHour: number,         // Evening reminder time (UTC)
+    maxRetries: number,                  // Notification retry limit
+    rateLimitPerMinute: number,          // Rate limiting threshold
+  },
+  embeds: {
+    baseUrl: string,                     // Embed service base URL
+    cacheMaxAge: number,                 // Cache duration for embeds
+    imageWidth: 763,                     // Standard image width
+    imageHeight: 400,                    // Standard image height
+  },
+  admin: {
+    authorizedFids: [39278, 16098],      // Admin user FIDs
+    enableBulkOperations: true,          // Bulk operation toggle
+    autoCreateCategories: true,          // Auto-create missing categories
+  },
+  isProduction: boolean
+}
+```
+
+### Security Features
+```typescript
+// Production security with notification, embed, and admin protection
+- Helmet.js for security headers
+- CORS configuration for allowed origins  
+- CSRF protection with token validation
+- HTTP-only cookies for session management
+- JWT signature verification via Farcaster
+- Notification webhook signature verification (JFS)
+- Rate limiting for notification endpoints
+- User token validation and cleanup
+- Embed endpoint input validation and sanitization
+- XSS protection for dynamic HTML generation
+- Admin FID-based authorization (no separate admin auth system)
+- Admin action logging and audit trails
+```
+
+## Common Development Operations
+
+### Adding New Admin Features
+```typescript
+// 1. Add to AdminController
+@Post('brands/:id/new-action')
+@UseGuards(AuthorizationGuard)
+async newAdminAction(
+  @Session() user: QuickAuthPayload,
+  @Param('id') id: number,
+  @Res() res: Response,
+) {
+  // FID validation
+  const adminFids = [39278, 16098];
+  if (!adminFids.includes(user.sub)) {
+    return hasError(res, HttpStatus.FORBIDDEN, 'newAdminAction', 'Admin access required');
+  }
+  
+  // Business logic
+  const result = await this.adminService.performAction(id);
+  return hasResponse(res, { result, message: 'Action completed' });
+}
+
+// 2. Implement in AdminService
+async performAction(brandId: number) {
+  // Reuse existing patterns from seeding service
+  // Auto-create categories, handle Neynar API calls
+  // Follow same error handling and logging patterns
+}
+
+// 3. Add to frontend admin panel
+const handleNewAction = async (brandId: number) => {
+  try {
+    await adminService.performAction(brandId);
+    // Refresh data, show success message
+  } catch (error) {
+    // Handle error, show user feedback
+  }
+};
+```
+
+### Adding New Endpoints
+```typescript
+// 1. Define in controller
+@Get('/new-endpoint')
+@UseGuards(AuthorizationGuard)  // Add authentication if needed
+async newEndpoint(@Session() user: QuickAuthPayload) {
+  return this.service.businessLogic(user.sub); // Use user.sub for FID
+}
+
+// 2. Implement in service
+async businessLogic(fid: number) {
+  const user = await this.userService.getByFid(fid);
+  return this.repository.findCustomData(user.id);
+}
+
+// 3. Create frontend hook with time period support
+const useNewData = (period: BrandTimePeriod) => useQuery({
+  queryKey: ["new-data", period],
+  queryFn: () => api.getNewData(period),
+});
+
+// 4. Add sharing support if applicable
+const shareNewContent = async (id: string, title: string) => {
+  await sdk.actions.composeCast({
+    text: `Check out this ${title} on BRND!`,
+    embeds: [`https://poiesis.anky.app/embeds/new-content/${id}`]
+  });
+};
+```
+
+### Database Migrations
+```typescript
+// TypeORM handles schema synchronization
+// Changes to @Entity classes automatically update database
+// New notification fields added automatically
+// New embed-related entities handled seamlessly
+// Admin operations use existing brand/category entities
+// For production: use proper migrations instead of synchronize
+```
+
+### Testing Data Operations
+```bash
+# Development endpoints for data management
+curl "http://localhost:3000/brand-service/dev/stats"           # Database stats
+curl -X POST "http://localhost:3000/brand-service/dev/seed"    # Populate database
+curl "http://localhost:3000/brand-service/dev/preview"         # Preview changes
+
+# Admin testing endpoints
+curl "http://localhost:3000/admin-service/brands"             # List brands (auth required)
+curl -X POST "http://localhost:3000/admin-service/brands"     # Create brand (auth required)
+curl "http://localhost:3000/admin-service/categories"         # List categories (auth required)
+
+# Notification testing endpoints
+curl -X POST "http://localhost:3000/notification-service/dev/trigger-daily-reminders"
+curl -X POST "http://localhost:3000/notification-service/dev/trigger-evening-reminders"
+curl -X POST "http://localhost:3000/notification-service/dev/trigger-monthly-cycle"
+curl -X POST "http://localhost:3000/notification-service/dev/process-queue"
+curl "http://localhost:3000/notification-service/health"
+
+# Embed testing endpoints
+curl "https://poiesis.anky.app/embeds/podium/test-vote-id"     # Test podium embed
+curl "https://poiesis.anky.app/embeds/podium/test-vote-id/image" # Test podium image
+curl "https://poiesis.anky.app/embeds/brand/1/image"           # Test brand image
+curl "https://poiesis.anky.app/embeds/health"                  # Embed service health
+```
+
+## Performance & Optimization
+
+### Database Query Optimization (Enhanced)
+```typescript
+// Selective field loading with time-based scoring
+const brands = await this.brandRepo.find({
+  select: ['id', 'name', 'imageUrl', 'scoreWeek', 'scoreMonth'],  // Period-specific fields
+  relations: ['category'],                  // Include relationships
+  where: { banned: 0 },                    // Filter conditions
+  order: { [scoreField]: 'DESC' },         // Dynamic sorting by period
+  skip: (page - 1) * limit,                // Pagination
+  take: limit
+});
+
+// Admin brand queries with search
+const adminBrands = await this.brandRepo.findAndCount({
+  where: search ? { name: Like(`%${search}%`) } : {},
+  relations: ['category'],
+  order: { name: 'ASC' },
+  skip: (page - 1) * limit,
+  take: limit,
+});
+
+// Personal brand rankings with SQL aggregation
+const userBrandQuery = `
+  SELECT 
+    brand_id, brand_name, brand_image_url,
+    SUM(points) as total_points,
+    COUNT(*) as vote_count,
+    MAX(vote_date) as last_voted
+  FROM (
+    SELECT b.id as brand_id, b.name as brand_name, b.imageUrl as brand_image_url,
+           60 as points, ubv.date as vote_date
+    FROM user_brand_votes ubv
+    JOIN brands b ON b.id = ubv.brand1Id
+    WHERE ubv.userId = ?
+    UNION ALL
+    SELECT b.id, b.name, b.imageUrl, 30 as points, ubv.date
+    FROM user_brand_votes ubv JOIN brands b ON b.id = ubv.brand2Id
+    WHERE ubv.userId = ?
+    UNION ALL
+    SELECT b.id, b.name, b.imageUrl, 10 as points, ubv.date
+    FROM user_brand_votes ubv JOIN brands b ON b.id = ubv.brand3Id
+    WHERE ubv.userId = ?
+  ) vote_aggregates
+  GROUP BY brand_id, brand_name, brand_image_url
+  ORDER BY total_points DESC, vote_count DESC, last_voted DESC
+`;
+
+// Notification queue optimization
+const pendingNotifications = await this.queueRepo.find({
+  where: {
+    status: NotificationStatusEnum.PENDING,
+    scheduledFor: LessThanOrEqual(now),
+    retryCount: LessThan(maxRetries),
+  },
+  relations: ['user'],
+  take: 50,                               // Process in batches
+  order: { scheduledFor: 'ASC' },         // FIFO processing
+});
+
+// Embed data optimization
+const vote = await this.votesRepo.findOne({
+  where: { id: voteId },
+  relations: ['user', 'brand1', 'brand2', 'brand3'], // Only needed relations
+  select: {
+    user: ['username'],                   // Minimal user data
+    brand1: ['name'],                     // Only brand names needed
+    brand2: ['name'],
+    brand3: ['name'],
+  }
+});
+```
+
+### Frontend Caching Strategy (Enhanced)
+```typescript
+// React Query configuration with notification, sharing, and admin support
+staleTime: 5 * 60 * 1000,     // Data fresh for 5 minutes
+cacheTime: 10 * 60 * 1000,    // Keep in cache for 10 minutes
+refetchOnWindowFocus: false,   // Don't refetch on tab focus
+retry: 1,                      // Retry failed requests once
+
+// Period-specific cache keys
+queryKey: ["brands", order, period, filters]  // Time period in cache key
+queryKey: ["notification-settings", userFid]  // User-specific notification cache
+queryKey: ["sharing-availability"]            // Farcaster context cache
+queryKey: ["userBrands"]                      // Personal brand rankings cache
+queryKey: ["auth"]                            // Auth data with todaysVote
+queryKey: ["admin", "brands", page, limit, search] // Admin brand management cache
+queryKey: ["admin", "categories"]             // Admin categories cache
+```
+
+### Admin System Performance
+```typescript
+// Optimized for frequent brand management operations
+Response Times:
+- Sub-200ms brand creation with Neynar follower fetching
+- Real-time search with debounced input (300ms delay)
+- Instant form validation with visual feedback
+- Smooth modal animations with hardware acceleration
+
+Caching Strategy:
+- Admin brand list cached for 5 minutes
+- Categories cached for 30 minutes (rarely change)
+- Form state persisted during navigation
+- Optimistic updates for immediate feedback
+
+Scalability Features:
+- Pagination for large brand datasets
+- Bulk operations for multiple brands
+- Async follower count fetching from Neynar
+- Error boundaries for graceful degradation
+```
+
+### Leaderboard Performance
+```typescript
+// In-memory caching for 1K-10K+ users
+- 15-minute cache TTL
+- Instant responses from memory
+- Real-time invalidation on point changes
+- Efficient pagination without database hits
+- Scales to 10,000+ users without performance issues
+```
+
+### Notification System Performance
+```typescript
+// Queue-based processing for reliability and scale
+Processing Speed:
+- 50 notifications per batch
+- 100 notifications per minute per client
+- 1-minute processing cycle via cron
+- Exponential backoff retry logic
+
+Memory Usage:
+- Rate limiting tracker with sliding window
+- Failed token cleanup and invalidation
+- 30-day retention policy for delivered notifications
+- Efficient batch grouping by target URL
+
+Reliability Features:
+- Idempotent notification IDs
+- Duplicate delivery prevention
+- Graceful degradation on failures
+- User token validation and cleanup
+```
+
+### Embed System Performance
+```typescript
+// Optimized for viral sharing loads
+Response Times:
+- Sub-100ms HTML generation for embeds
+- Efficient database queries with minimal relations
+- Inline CSS to reduce external dependencies
+- Optimized HTML structure for fast parsing
+
+Caching Strategy:
+- 1-hour cache headers for static content
+- Browser caching for repeated social media scrapes
+- CDN-friendly response structure
+- Efficient image generation pipeline
+
+Scalability Features:
+- Stateless embed generation
+- Database connection pooling
+- Horizontal scaling capability
+- Load balancer compatibility
+```
+
+## Troubleshooting Common Issues
+
+### Admin System Issues
+```typescript
+// Check admin FID authorization
+// Verify admin routes are properly protected
+// Ensure AdminModule is imported in CoreModules
+// Check admin service dependency injection
+// Validate admin controller path (/admin-service)
+// Monitor admin action logging for debugging
+// Verify category auto-creation logic
+// Check Neynar API integration for follower counts
+// Ensure proper error handling in admin forms
+// Validate modal state management and navigation
+```
+
+### Authentication Problems
+```typescript
+// Check token extraction in AuthorizationGuard
+// Verify Farcaster QuickAuth domain configuration
+// Ensure user creation in /me endpoint works
+// Validate React Query auth cache updates
+// Remember: user.sub contains FID, not user.id
+// Check notification preferences are properly set
+// Verify sharing context availability
+// Ensure todaysVote is included in /me response
+// Validate admin FID checking logic
+```
+
+### Voting System Issues
+```typescript
+// Check UTC date consistency
+// Verify hasVotedToday calculation in /me endpoint
+// Ensure duplicate vote prevention works
+// Validate points are awarded correctly (100 total)
+// Check cache invalidation after voting
+// Verify time-based scoring updates (weekly/monthly)
+// Ensure notification prompts appear after first vote
+// Check sharing integration in voting flow
+// Verify vote data appears in share screen immediately after voting
+// Check auto-redirect logic for users who have already voted
+```
+
+### Personal Brand Rankings Issues
+```typescript
+// Verify SQL aggregation query for user brand rankings
+// Check brand vote counting (60/30/10 points distribution)
+// Ensure only brands the user has voted for appear
+// Validate ranking order by total points DESC
+// Check frontend data structure matches backend response
+// Verify scrollable layout matches main brand lists
+// Ensure no variation display for personal rankings
+```
+
+### Time Period Filter Issues
+```typescript
+// Verify period parameter is passed to backend API
+// Check dynamic score field selection logic
+// Ensure fallback behavior (month -> week -> all)
+// Validate React Query cache keys include period
+// Check frontend state management for period changes
+// Verify brand ranking consistency across periods
+```
+
+### Vote Flow Issues
+```typescript
+// Check vote submission navigation to /vote/{unixDate}?success
+// Verify auth query invalidation after successful vote
+// Ensure todaysVote appears in refreshed auth data
+// Check auto-redirect when user visits /vote after voting
+// Validate share screen displays immediately after voting
+// Verify vote data structure in ShareView component
+// Check brand order consistency ([brand2, brand1, brand3] for UI)
+```
+
+### Notification System Issues
+```typescript
+// Check Farcaster webhook signature verification
+// Verify notification queue processing cron jobs
+// Ensure user tokens are valid and not expired
+// Check rate limiting logic and thresholds
+// Validate notification delivery status updates
+// Monitor failed notification retry cycles
+// Verify monthly winner cycle timing and execution
+// Check localStorage notification settings persistence
+```
+
+### Embed System Issues
+```typescript
+// Check embed URL accessibility from external networks
+// Verify image endpoint returns valid HTML (not 404)
+// Ensure proper aspect ratio (763×400px) for Farcaster
+// Check frame metadata syntax and encoding
+// Validate dynamic data fetching (votes, brands, users)
+// Monitor cache headers and response times
+// Verify social media scraper compatibility
+// Check error handling for missing content
+// Ensure XSS protection doesn't break dynamic content
+```
+
+### Database Issues
+```typescript
+// Verify entity relationships in TypeORM
+// Check module imports include all required entities (Brand, NotificationQueue, etc.)
+// Ensure repository injection works correctly
+// Validate database connection configuration
+// Check notification queue table creation and indexes
+// Verify monthly score reset operations
+// Ensure embed data queries are optimized
+// Check user brand votes aggregation performance
+// Validate admin service database operations
+// Monitor admin bulk operation performance
+```
+
+### Frontend State Issues
+```typescript
+// Check React Query key consistency with period parameter
+// Verify context provider wrapping (Auth + Notification)
+// Ensure proper error boundary handling
+// Validate token storage and retrieval
+// Check cache invalidation after mutations
+// Verify notification prompt localStorage integration
+// Check time period filter state management
+// Validate sharing button state and availability
+// Ensure embed URL generation is correct
+// Check vote page view state management
+// Verify personal brand rankings data flow
+// Validate admin modal state management
+// Check admin form validation and error display
+// Ensure admin button visibility logic works correctly
+```
+
+### Caching Issues
+```typescript
+// Verify leaderboard cache refresh logic
+// Check cache invalidation on point changes
+// Ensure memory usage stays reasonable
+// Validate cache TTL behavior
+// Monitor cache hit/miss rates
+// Check notification rate limiting cache
+// Verify period-specific brand data caching
+// Validate embed response caching headers
+// Monitor social media scraper cache behavior
+// Check auth cache updates with todaysVote data
+// Validate admin data caching strategies
+// Monitor admin operation cache invalidation
+```
+
+## Current Project Structure (Updated)
+```
+src/
+├── core/
+│   ├── auth/          # Authentication (QuickAuth JWT) with todaysVote
+│   ├── brand/         # Brand management & voting with time filters
+│   ├── user/          # User management, leaderboard & personal rankings
+│   ├── admin/         # Admin system (NEW)
+│   │   ├── services/  # AdminService with Neynar integration
+│   │   ├── dto/       # CreateBrandDto, UpdateBrandDto
+│   │   ├── admin.controller.ts  # Admin API endpoints
+│   │   └── admin.module.ts      # Admin module configuration
+│   ├── notification/  # Notification system
+│   │   ├── services/  # NotificationService & NotificationScheduler
+│   │   ├── notification.controller.ts
+│   │   └── notification.module.ts
+│   ├── embeds/        # Dynamic embed system
+│   │   ├── embeds.controller.ts
+│   │   ├── embeds.service.ts
+│   │   └── embeds.module.ts
+│   └── vote/          # Vote-related operations
+├── models/            # TypeORM entities
+│   ├── NotificationQueue/  # Notification entity & types
+│   ├── UserBrandVotes/     # Voting records
+│   └── ...
+├── security/          # Guards, decorators, middleware
+├── utils/             # Utilities & external APIs
+│   ├── share.ts       # Sharing utilities
+│   └── ...
+├── components/        # Frontend components
+│   ├── TimePeriodFilter/   # Time period selection
+│   ├── NotificationPrompt/ # Smart notification prompting
+│   ├── ShareButton/        # Universal sharing component
+│   └── ...
+├── pages/             # Frontend pages
+│   ├── VotePage/           # Voting with share flow
+│   ├── ProfilePage/        # User profile with personal rankings + admin button
+│   ├── AdminPage/          # Admin panel (NEW)
+│   │   ├── components/     # Admin-specific components
+│   │   ├── AdminPage.module.scss  # Admin styling
+│   │   └── index.tsx       # Main admin interface
+│   └── ...
+├── services/          # Frontend API services
+│   ├── adminService.ts     # Admin API client (NEW)
+│   └── ...
+├── hooks/             # Frontend hooks
+│   ├── admin.ts            # Admin-specific hooks (NEW)
+│   └── ...
+└── doc/              # API documentation
+```
+
+## Monthly Competition Cycle
+```typescript
+Automated Monthly Process:
+1. 1st of each month, 9 AM UTC: Monthly winner cycle begins
+2. Identify brand with highest scoreMonth
+3. Queue winner announcements to all notification-enabled users
+4. Deliver notifications: "🏆 [Month] Brand Champion!"
+5. Reset monthly scores for all brands (scoreMonth = 0)
+6. Start fresh monthly competition
+
+User Experience:
+- Monthly anticipation and excitement
+- Community-wide winner celebrations
+- Fresh competitive slate each month
+- Notification-driven engagement
+- Social proof for winning brands
+- Shareable monthly winner embeds
+
+Admin Management:
+- Admins can manually refresh follower counts before competitions
+- Bulk operations for brand maintenance
+- Real-time brand creation during active competitions
+- Category management for proper brand organization
+```
+
+## Smart Notification Strategy
+```typescript
+User Journey Integration:
+1. User downloads app -> No immediate prompt (respectful onboarding)
+2. User votes for first time -> CongratsView celebration
+3. 2 seconds after celebration -> Smart notification prompt appears
+4. Context: "You just earned 100 points! Never miss earning more!"
+5. User adds miniapp -> Welcome notification + daily reminders enabled
+
+Prompt Intelligence:
+- Only shown if backend notifications disabled
+- 7-day cooldown if user dismisses
+- localStorage tracking prevents spam
+- Context-aware messaging with earned points
+- Benefits-focused value proposition
+- Graceful error handling and loading states
+
+Retention Strategy:
+- Daily reminders at 10 AM UTC (morning motivation)
+- Evening reminders at 8 PM UTC (last chance urgency)
+- Monthly winner announcements (community excitement)
+- No spam - smart frequency management
+- User-controlled preferences via Farcaster settings
+```
+
+## Viral Sharing Strategy
+```typescript
+Sharing Integration Points:
+1. Post-vote sharing (ShareView) -> Podium embeds with personalized results
+2. Brand discovery sharing -> Brand embeds with current metrics
+3. Leaderboard achievement sharing -> Rank embeds with competitive context
+4. Monthly winner sharing -> Champion embeds with community celebration
+
+Viral Loop Mechanics:
+- Rich visual content in Farcaster feeds
+- One-click miniapp launch from embeds
+- Immediate engagement upon opening
+- Social proof through visible rankings
+- Competitive dynamics driving sharing
+- Network effects through follower exposure
+
+Technical Viral Features:
+- Dynamic content generation for uniqueness
+- Proper aspect ratios for feed optimization
+- Fast loading times for social media scrapers
+- Mobile-optimized visuals
+- Frame metadata for seamless launching
+- Deep linking to specific content areas
+```
+
+## NEW: Personal Brand Rankings System
+```typescript
+User-Specific Brand Analytics:
+- Aggregates all user votes across time
+- Calculates total points per brand (60/30/10 point system)
+- Ranks brands by user's personal preference
+- Shows only brands the user has voted for
+- No time period filters (all-time data only)
+
+SQL-Based Aggregation:
+- Efficient UNION ALL query for all vote positions
+- Groups by brand with SUM(points) and COUNT(votes)
+- Orders by total_points DESC, vote_count DESC
+- Handles user-specific brand preferences
+
+Frontend Integration:
+- Clean scrollable list matching main brand design
+- Position numbers and points naturally displayed
+- No variation indicators for simplicity
+- Same visual style as TrendBrands component
+- Empty state encourages first vote
+```
+
+## NEW: Enhanced Vote Flow
+```typescript
+Seamless Post-Vote Experience:
+1. User submits vote -> Vote API call succeeds
+2. Auth cache invalidated -> Fresh user data with todaysVote
+3. Navigate to /vote/{unixDate}?success -> URL reflects vote
+4. VotePage loads with success parameter -> Shows share screen
+5. User can share their podium or skip to home
+
+Auto-Redirect Logic:
+- User visits /vote after voting -> Auto-redirect to /vote/{todayUnix}
+- Ensures users always see their share screen when they have voted
+- Prevents "nothing happens" when clicking vote button after voting
+- Consistent URL structure for vote sharing
+
+Share Screen Integration:
+- Immediate display of voting results
+- Rich embed generation for social sharing
+- One-click Farcaster cast composition
+- Points earned display and encouragement
+- Skip option returns to home dashboard
+```
+
+## NEW: Admin Management System
+```typescript
+Comprehensive Brand Administration:
+1. FID-based authentication (no separate admin login)
+2. Modal-based interface with glassmorphism design
+3. Three-step workflow: Menu → Form → Confirmation
+4. Real-time brand search and selection
+5. Live image preview and validation
+
+Admin Features:
+- Create new brands with smart field handling
+- Edit existing brands with pre-populated data
+- Auto-format profile (@username) and channel (/channel) fields
+- Automatic follower count fetching from Neynar
+- Category auto-creation with "General" fallback
+- Bulk follower count refresh operations
+- Visual error highlighting with shake animations
+
+Integration Benefits:
+- Synchronized with existing seeding service logic
+- Same profile/channel processing patterns
+- Consistent field initialization and validation
+- Seamless integration with brand voting system
+- Real-time updates without system restart
+```
+
+## Environment Variables Summary
+```bash
+# Core Application
+DATABASE_NAME=brnd_db
+DATABASE_HOST=localhost
+DATABASE_PORT=3306
+DATABASE_USER=root
+DATABASE_PASSWORD=password
+PORT=3000
+ENV=dev
+
+# Notification System
+NOTIFICATIONS_ENABLED=true
+NOTIFICATION_BASE_URL=https://miniapp.anky.app
+DAILY_REMINDER_HOUR=10
+EVENING_REMINDER_HOUR=20
+NOTIFICATION_MAX_RETRIES=3
+NOTIFICATION_RATE_LIMIT=100
+
+# Embed System
+EMBED_BASE_URL=https://poiesis.anky.app/embeds
+EMBED_CACHE_MAX_AGE=3600
+EMBED_IMAGE_WIDTH=763
+EMBED_IMAGE_HEIGHT=400
+
+# Admin System
+ADMIN_AUTHORIZED_FIDS=39278,16098
+ADMIN_ENABLE_BULK_OPERATIONS=true
+ADMIN_AUTO_CREATE_CATEGORIES=true
+
+# Farcaster Integration
+NEYNAR_API_KEY=your_neynar_key
+```
+
+## Farcaster Manifest Configuration
+```json
+{
+  "accountAssociation": {
+    "header": "your_encoded_header",
+    "payload": "your_encoded_payload", 
+    "signature": "your_signature"
+  },
+  "frame": {
+    "version": "1",
+    "name": "BRND",
+    "iconUrl": "https://miniapp.anky.app/icon.png",
+    "homeUrl": "https://miniapp.anky.app/",
+    "webhookUrl": "https://poiesis.anky.app/notification-service/webhook",
+    "splashImageUrl": "https://miniapp.anky.app/splash.png",
+    "splashBackgroundColor": "#000000",
+    "subtitle": "Vote for your favorite crypto brands",
+    "description": "Discover, vote, and earn points by ranking your favorite brands in the crypto ecosystem",
+    "primaryCategory": "social",
+    "tags": ["voting", "crypto", "brands", "community", "social"],
+    "tagline": "Vote daily, earn points, climb ranks"
+  }
+}
+```
+
+This codebase represents a modern, production-ready Farcaster miniapp with:
+
+## Key System Capabilities
+- **Sophisticated authentication** using Farcaster QuickAuth with todaysVote integration
+- **Real-time voting system** with duplicate prevention and multi-timeframe scoring
+- **Personal brand rankings** showing user-specific preferences and voting patterns
+- **Time-based ranking filters** (week/month/all-time) with dynamic scoring
+- **Seamless vote flow** with immediate share screen display after voting
+- **Bulletproof notification system** with queue-based delivery and retry logic
+- **Community features** (public podium feed, leaderboard, monthly competitions)
+- **Performance-optimized caching** with 15-minute leaderboard TTL
+- **Smart user engagement** through context-aware notification prompting
+- **Automated monthly cycles** with winner announcements and score resets
+- **Flexible data management** with intelligent seeding and fallback logic
+- **Robust error handling** with graceful degradation across all systems
+- **Dynamic embed system** for viral social sharing with rich visuals
+- **Complete sharing infrastructure** for all content types
+- **Professional admin system** with FID-based authorization and visual interface
+- **Automated brand management** with Neynar integration and smart validation
+
+## Business Impact
+- **Daily active user growth** through morning and evening vote reminders
+- **Personal engagement** via individual brand ranking insights
+- **Improved retention** through seamless post-vote sharing experience
+- **Monthly engagement spikes** via brand champion competitions and announcements
+- **Community building** through public vote feeds and leaderboard competition
+- **Brand loyalty** driven by time-based ranking competition (weekly/monthly)
+- **Viral growth potential** through notification-prompted miniapp additions
+- **Data-driven insights** from multi-timeframe voting pattern analysis
+- **Social media amplification** through rich embed sharing across Farcaster
+- **Network effects** driven by visual content in social feeds
+- **Competitive dynamics** amplified through shareable achievements
+- **Professional brand management
