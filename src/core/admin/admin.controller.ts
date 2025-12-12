@@ -615,12 +615,8 @@ export class AdminController {
       );
       console.log('*************************************************');
 
-      return hasResponse(res, {
-        message: `forced return because of testing. There are ${brands.length} brands to upload, and the number 222 is ${brands[222].id}, ${brands[222].handle}, ${brands[222].fid}, ${brands[222].walletAddress}, ${brands[222].metadataHash}`,
-        brands,
-      });
-
       // 3. Upload to contract in batches
+
       const result =
         await this.contractUploadService.uploadBrandsToContract(brands);
 

@@ -1,9 +1,9 @@
 /**
  * Migration Script: Apply New Schema
- * 
+ *
  * This script creates all tables in the new database using TypeORM's synchronize feature.
  * It uses the entity models defined in src/models/ to create the schema.
- * 
+ *
  * This is safe because we just cleaned the database in the previous step.
  */
 
@@ -32,14 +32,20 @@ async function applyNewSchema() {
     database: process.env.DATABASE_NAME,
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
-    requireSSL: process.env.DATABASE_SSL === 'true' || process.env.NODE_ENV === 'production',
+    requireSSL:
+      process.env.DATABASE_SSL === 'true' ||
+      process.env.NODE_ENV === 'production',
   };
 
   // Validate that all required environment variables are set
   if (!newConfig.database || !newConfig.username || !newConfig.password) {
     console.error('❌ ERROR: Missing required database environment variables:');
-    console.error('   Required: DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD');
-    console.error('   Optional: DATABASE_HOST (defaults to localhost), DATABASE_PORT (defaults to 3306)');
+    console.error(
+      '   Required: DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD',
+    );
+    console.error(
+      '   Optional: DATABASE_HOST (defaults to localhost), DATABASE_PORT (defaults to 3306)',
+    );
     process.exit(1);
   }
 
@@ -64,7 +70,7 @@ async function applyNewSchema() {
       AirdropLeaf,
       RewardClaim,
     ],
-    synchronize: true, // Enable synchronize to create tables
+    synchronize: false, // Enable synchronize to create tables
     logging: false,
     ssl: newConfig.requireSSL
       ? {
@@ -90,7 +96,9 @@ async function applyNewSchema() {
     console.log('  This will create the following tables:');
     console.log('    - Core: users, brands, categories, tags, brand_tags');
     console.log('    - Voting: user_brand_votes, user_daily_actions');
-    console.log('    - New: airdrop_scores, airdrop_snapshots, airdrop_leaves, reward_claims');
+    console.log(
+      '    - New: airdrop_scores, airdrop_snapshots, airdrop_leaves, reward_claims',
+    );
 
     // The synchronize option in DataSource will automatically create tables
     // We just need to ensure the connection is established
@@ -98,14 +106,14 @@ async function applyNewSchema() {
 
     // Verify tables were created by querying information_schema
     const queryRunner = dataSource.createQueryRunner();
-    const tables = await queryRunner.query(
+    const tables = (await queryRunner.query(
       `SELECT TABLE_NAME 
        FROM information_schema.TABLES 
        WHERE TABLE_SCHEMA = ? 
        AND TABLE_TYPE = 'BASE TABLE'
        ORDER BY TABLE_NAME`,
-      [newConfig.database]
-    ) as Array<{ TABLE_NAME: string }>;
+      [newConfig.database],
+    )) as Array<{ TABLE_NAME: string }>;
 
     console.log(`\n✓ Schema applied successfully`);
     console.log(`  Created ${tables?.length || 0} table(s):`);
@@ -117,12 +125,13 @@ async function applyNewSchema() {
 
     // Release query runner
     await queryRunner.release();
-
   } catch (error: any) {
     console.error('\n❌ ERROR: Failed to apply schema:');
     console.error(`   ${error.message}`);
     console.error('');
-    console.error('   Please check your DATABASE_* environment variables and connection.');
+    console.error(
+      '   Please check your DATABASE_* environment variables and connection.',
+    );
     process.exit(1);
   } finally {
     // Close the connection
@@ -144,4 +153,3 @@ applyNewSchema()
     console.error(error);
     process.exit(1);
   });
-

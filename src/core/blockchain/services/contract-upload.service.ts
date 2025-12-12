@@ -17,7 +17,7 @@ import { getConfig } from '../../../security/config';
 import { logger } from '../../../main';
 import { IpfsService } from '../../../utils/ipfs.service';
 
-// Contract ABI for BRNDSEASON1
+// Contract ABI for BRNDSEASON2
 const CONTRACT_ABI = [
   {
     inputs: [
@@ -54,6 +54,44 @@ const CONTRACT_ABI = [
     type: 'error',
   },
   { inputs: [], name: 'Unauthorized', type: 'error' },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'admin',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'addedBy',
+        type: 'address',
+      },
+    ],
+    name: 'AdminAdded',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'admin',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'removedBy',
+        type: 'address',
+      },
+    ],
+    name: 'AdminRemoved',
+    type: 'event',
+  },
   {
     anonymous: false,
     inputs: [
@@ -332,6 +370,13 @@ const CONTRACT_ABI = [
     type: 'function',
   },
   {
+    inputs: [{ internalType: 'address', name: 'admin', type: 'address' }],
+    name: 'addAdmin',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [{ internalType: 'address', name: '', type: 'address' }],
     name: 'authorizedFidOf',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
@@ -369,6 +414,13 @@ const CONTRACT_ABI = [
       { internalType: 'string', name: 'metadataHash', type: 'string' },
       { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
     ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'checkIsAdmin',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -454,7 +506,7 @@ const CONTRACT_ABI = [
           { internalType: 'string', name: 'metadataHash', type: 'string' },
           { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
         ],
-        internalType: 'struct StoriesInMotionV7.Brand',
+        internalType: 'struct BRNDSeason2.Brand',
         name: '',
         type: 'tuple',
       },
@@ -483,13 +535,6 @@ const CONTRACT_ABI = [
     inputs: [{ internalType: 'uint8', name: 'brndPowerLevel', type: 'uint8' }],
     name: 'getRewardAmount',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'pure',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'getUserBrndPowerLevel',
-    outputs: [{ internalType: 'uint8', name: '', type: 'uint8' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -502,25 +547,6 @@ const CONTRACT_ABI = [
       { internalType: 'uint32', name: 'lastVoteDay', type: 'uint32' },
       { internalType: 'uint256', name: 'totalVotes', type: 'uint256' },
     ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'wallet', type: 'address' }],
-    name: 'getUserInfoByWallet',
-    outputs: [
-      { internalType: 'uint256', name: 'fid', type: 'uint256' },
-      { internalType: 'uint8', name: 'brndPowerLevel', type: 'uint8' },
-      { internalType: 'uint32', name: 'lastVoteDay', type: 'uint32' },
-      { internalType: 'uint256', name: 'totalVotes', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'getUserTotalVotes',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -556,6 +582,13 @@ const CONTRACT_ABI = [
     type: 'function',
   },
   {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'isAdmin',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
     inputs: [
       { internalType: 'uint256', name: 'fid', type: 'uint256' },
       { internalType: 'uint8', name: 'newLevel', type: 'uint8' },
@@ -573,6 +606,13 @@ const CONTRACT_ABI = [
     name: 'owner',
     outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'admin', type: 'address' }],
+    name: 'removeAdmin',
+    outputs: [],
+    stateMutability: 'nonpayable',
     type: 'function',
   },
   {
@@ -616,6 +656,15 @@ const CONTRACT_ABI = [
     type: 'function',
   },
   {
+    inputs: [
+      { internalType: 'uint256', name: 'newMultiplier', type: 'uint256' },
+    ],
+    name: 'updateRewardMultiplier',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     name: 'users',
     outputs: [
@@ -642,13 +691,6 @@ const CONTRACT_ABI = [
     name: 'withdrawBrandRewards',
     outputs: [],
     stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'string', name: '', type: 'string' }],
-    name: 'handleExists',
-    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-    stateMutability: 'view',
     type: 'function',
   },
 ] as const;
@@ -716,9 +758,6 @@ export class ContractUploadService {
           'walletAddress',
           'isUploadedToContract',
         ],
-        where: {
-          isUploadedToContract: false, // Only get non-uploaded brands
-        },
         order: { id: 'ASC' }, // Order by database ID for consistent contract IDs
       };
 
@@ -738,10 +777,14 @@ export class ContractUploadService {
       for (let index = 0; index < brands.length; index++) {
         const brand = brands[index];
 
-        // Use existing handle or name as fallback
-        const handle =
+        // Use existing handle or name as fallback, sanitize problematic characters
+        let handle =
           brand.onChainHandle ||
           brand.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Sanitize handle: replace problematic characters with 'x' to ensure contract compatibility
+        // This prevents ID mismatches caused by characters like underscores being rejected
+        handle = this.sanitizeHandleForContract(handle);
 
         // Skip if we've already seen this handle
         const handleLower = handle.toLowerCase();
@@ -770,6 +813,15 @@ export class ContractUploadService {
             metadataHash = await this.generateMetadataHash(fullBrand, index);
             logger.log(
               `📤 [IPFS] Uploaded metadata for brand "${brand.name}" (ID: ${brand.id}): ${metadataHash}`,
+            );
+
+            // Save the metadata hash to the database so we don't need to regenerate it
+            await this.brandRepository.update(
+              { id: brand.id },
+              { metadataHash },
+            );
+            logger.log(
+              `💾 [DB] Saved metadata hash for brand "${brand.name}" (ID: ${brand.id})`,
             );
           } catch (error) {
             logger.error(
@@ -803,7 +855,7 @@ export class ContractUploadService {
         }
 
         // Use existing FID or generate placeholder
-        const fid = brand.onChainFid || 10000 + index; // Start at 10000 for placeholder FIDs
+        const fid = 1341847; // Start at 10000 for placeholder FIDs
 
         // Use existing wallet or default
         const walletAddress = brand.walletAddress || this.DEFAULT_WALLET;
@@ -825,6 +877,28 @@ export class ContractUploadService {
       logger.error('Error fetching brands for contract:', error);
       throw error;
     }
+  }
+
+  /**
+   * Sanitizes a handle for smart contract compatibility
+   * Replaces problematic characters with 'x' to prevent upload failures and ID mismatches
+   */
+  private sanitizeHandleForContract(handle: string): string {
+    // Replace any non-alphanumeric characters with 'x'
+    // This ensures all handles are accepted by the contract in the same order
+    const sanitized = handle.replace(/[^a-zA-Z0-9]/g, 'x');
+
+    // Ensure handle is not empty and not too long
+    if (!sanitized || sanitized.length === 0) {
+      return 'defaulthandle';
+    }
+
+    if (sanitized.length > 32) {
+      return sanitized.substring(0, 32);
+    }
+
+    logger.log(`🧹 [SANITIZE] "${handle}" → "${sanitized}"`);
+    return sanitized;
   }
 
   validateBrandsForContract(brands: ContractBrand[]): ValidationResult {
@@ -858,10 +932,10 @@ export class ContractUploadService {
       }
       seenHandles.add(handleLower);
 
-      // Validate handle format
-      if (!/^[a-zA-Z0-9_-]+$/.test(brand.handle)) {
+      // Validate sanitized handle format (should only contain alphanumeric after sanitization)
+      if (!/^[a-zA-Z0-9]+$/.test(brand.handle)) {
         issues.push(
-          `Brand ${index + 1}: Invalid handle format "${brand.handle}"`,
+          `Brand ${index + 1}: Handle not properly sanitized "${brand.handle}"`,
         );
       }
 
@@ -913,7 +987,9 @@ export class ContractUploadService {
     try {
       await this.brandRepository.update(
         { id: In(brandIds) },
-        { isUploadedToContract: true },
+        {
+          isUploadedToContract: true,
+        },
       );
       logger.log(
         `✅ [CONTRACT] Marked ${brandIds.length} brands as uploaded: [${brandIds.join(', ')}]`,
@@ -1157,11 +1233,10 @@ export class ContractUploadService {
       const contractAddress = process.env
         .BRND_SEASON_2_ADDRESS as `0x${string}`;
 
-      // Since _brandIdCounter is private in V5, we'll count by checking existing brands
-      // Try to get brands starting from ID 1 until we hit an error (brand doesn't exist)
+      // Since _brandIdCounter is private, we'll count by checking existing brands
       let brandCount = 0;
       let currentId = 1;
-      let maxChecks = 1000; // Safety limit to avoid infinite loop
+      let maxChecks = 500; // Safety limit
 
       while (maxChecks > 0) {
         try {
@@ -1181,9 +1256,7 @@ export class ContractUploadService {
         }
       }
 
-      logger.log(
-        `📊 [CONTRACT] Contract has ${brandCount} brands (checked up to ID ${currentId - 1})`,
-      );
+      logger.log(`📊 [CONTRACT] Contract has ${brandCount} brands`);
       return brandCount;
     } catch (error) {
       logger.error('Error getting contract brand count:', error);
@@ -1415,8 +1488,8 @@ export class ContractUploadService {
     };
 
     // Upload to IPFS using Pinata
-    const ipfsHash = await this.ipfsService.uploadJsonToIpfs(metadata);
 
+    const ipfsHash = await this.ipfsService.uploadJsonToIpfs(metadata);
     logger.log(
       `✅ [IPFS] Successfully uploaded metadata for brand "${brand.name}" to IPFS: ${ipfsHash}`,
     );
