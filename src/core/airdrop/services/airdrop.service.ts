@@ -447,7 +447,7 @@ export class AirdropService {
           cast.embeds.some(
             (embed) =>
               typeof embed.url === 'string' &&
-              embed.url.includes('https://www.brnd.land'),
+              embed.url.includes('https://brnd.land'),
           ),
       );
       const podiumCastsCount = podiumCasts.length;

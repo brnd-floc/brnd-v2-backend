@@ -64,8 +64,8 @@ export const getConfig = () => ({
   },
   notifications: {
     enabled: false,
-    baseUrl: process.env.NOTIFICATION_BASE_URL || 'https://www.brnd.land',
-    miniappUrl: process.env.MINIAPP_URL || 'https://www.brnd.land',
+    baseUrl: process.env.NOTIFICATION_BASE_URL || 'https://brnd.land',
+    miniappUrl: process.env.MINIAPP_URL || 'https://brnd.land',
     dailyReminderHour: parseInt(process.env.DAILY_REMINDER_HOUR || '10', 10),
     eveningReminderHour: parseInt(
       process.env.EVENING_REMINDER_HOUR || '20',
@@ -180,7 +180,7 @@ const domains: Domains = {
   PRO: [
     'http://127.0.0.1:5173',
     'http://localhost:5173',
-    'https://www.brnd.land',
+    'https://brnd.land',
     'https://www.brnd.land',
     'https://rebrnd.lat',
     'https://frame.brnd.land',
