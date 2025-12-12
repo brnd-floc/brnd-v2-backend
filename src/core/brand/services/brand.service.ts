@@ -1012,28 +1012,28 @@ export class BrandService {
 
     const skip = (page - 1) * limit;
 
-    const [podiums, count] = await this.userBrandVotesRepository.findAndCount({
-      where: {
-        transactionHash: Not(IsNull()),
-      },
-      relations: [
-        'user', // Get user info (username, photoUrl, etc.)
-        'brand1', // 1st place brand
-        'brand2', // 2nd place brand
-        'brand3', // 3rd place brand
-      ],
-      order: {
-        date: 'DESC', // Most recent first
-      },
-      skip,
-      take: limit,
-      // Optional: Filter out votes from banned users if needed
-      // where: {
-      //   user: {
-      //     banned: false,
-      //   },
-      // },
-    });
+    // Filter for podiums more recent than 2025-12-12 14:14:14
+    const minDate = new Date('2025-12-12T14:14:14');
+
+    // Use QueryBuilder for better performance
+    // transactionHash is primary key, so it can't be null - no need to check
+    const baseQuery = this.userBrandVotesRepository
+      .createQueryBuilder('vote')
+      .where('vote.date > :minDate', { minDate });
+
+    // Get count first (without joins for speed)
+    const count = await baseQuery.getCount();
+
+    // Get data with relations
+    const podiums = await baseQuery
+      .leftJoinAndSelect('vote.user', 'user')
+      .leftJoinAndSelect('vote.brand1', 'brand1')
+      .leftJoinAndSelect('vote.brand2', 'brand2')
+      .leftJoinAndSelect('vote.brand3', 'brand3')
+      .orderBy('vote.date', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     console.log(
       `🏆 [BrandService] Found ${count} total podiums, returning ${podiums.length} for this page`,
