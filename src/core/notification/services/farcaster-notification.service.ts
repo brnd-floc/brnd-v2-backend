@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, IsNull } from 'typeorm';
 import { User, UserBrandVotes } from '../../../models';
 import { Brand } from '../../../models';
+import { devLog, debugLog, warnLog, errorLog, criticalLog } from '../../../utils/logger.utils';
 
 @Injectable()
 export class FarcasterNotificationService {
@@ -97,9 +98,7 @@ export class FarcasterNotificationService {
     // Validate content against Farcaster limits
     this.validateNotificationContent(title, body, notificationId);
 
-    this.logger.log(
-      `📤 Sending notification: ${title} (ID: ${notificationId})`,
-    );
+    criticalLog(this.logger, `Sending notification: ${title} (ID: ${notificationId})`);
 
     // Get all users with notification tokens
     const users = await this.userRepository.find({
@@ -111,24 +110,25 @@ export class FarcasterNotificationService {
     });
 
     if (users.length === 0) {
-      this.logger.log('⚠️ No users with notification tokens found');
+      warnLog(this.logger, 'No users with notification tokens found');
       return { sent: 0, failed: 0, rateLimited: 0 };
     }
 
-    this.logger.log(`📋 Found ${users.length} users to notify`);
+    debugLog(this.logger, `Found ${users.length} users to notify`);
 
     // Filter users based on rate limits
     const eligibleUsers = users.filter((user) => this.canSendToUser(user.id));
     const rateLimited = users.length - eligibleUsers.length;
 
     if (rateLimited > 0) {
-      this.logger.log(
-        `⚠️ ${rateLimited} users rate-limited, sending to ${eligibleUsers.length}`,
+      debugLog(
+        this.logger,
+        `${rateLimited} users rate-limited, sending to ${eligibleUsers.length}`,
       );
     }
 
     if (eligibleUsers.length === 0) {
-      this.logger.log('⚠️ No eligible users after rate limiting');
+      warnLog(this.logger, 'No eligible users after rate limiting');
       return { sent: 0, failed: 0, rateLimited };
     }
 
@@ -175,7 +175,7 @@ export class FarcasterNotificationService {
           );
         }
       } catch (error) {
-        this.logger.error(`❌ Error sending notification batch:`, error);
+        errorLog(this.logger, `Error sending notification batch:`, error);
         failed += batch.length;
       }
     }
@@ -300,7 +300,7 @@ export class FarcasterNotificationService {
           );
         }
       } catch (error) {
-        this.logger.error(`❌ Error sending notification batch:`, error);
+        errorLog(this.logger, `Error sending notification batch:`, error);
         failed += batch.length;
       }
     }

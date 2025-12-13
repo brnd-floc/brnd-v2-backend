@@ -628,8 +628,7 @@ export class IndexerService {
       // Find the corresponding UserBrandVotes record by user FID and day
       const userVote = await this.userBrandVotesRepository.findOne({
         where: {
-          user: { fid: claimData.fid },
-          day: dayNumber,
+          castHash: claimData.castHash,
         },
         relations: ['user'],
       });
@@ -659,7 +658,7 @@ export class IndexerService {
         // This shouldn't normally happen - claim should come after vote
         // But create a placeholder record just in case
         logger.warn(
-          `⚠️ [INDEXER] No existing vote found for FID ${claimData.fid}, day ${dayNumber}. Creating placeholder.`,
+          `⚠️ [INDEXER] No existing vote found for FID ${claimData.fid}, castHash ${claimData.castHash}. Creating placeholder.`,
         );
 
         // Find or create user by FID

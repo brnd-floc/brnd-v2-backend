@@ -6,6 +6,7 @@ import { Repository, MoreThan } from 'typeorm';
 import { Brand, UserBrandVotes } from '../../../models';
 import { FarcasterNotificationService } from '../../notification/services';
 import { getConfig } from '../../../security/config';
+import { devLog, debugLog, warnLog, errorLog, criticalLog } from '../../../utils/logger.utils';
 
 @Injectable()
 export class BrandSchedulerService {
@@ -27,9 +28,7 @@ export class BrandSchedulerService {
   @Cron('0 0 * * *', { timeZone: 'UTC' }) // Every day at midnight UTC
   async handlePeriodEnd() {
     const now = new Date();
-    this.logger.log(
-      `🔄 [PERIOD END] Processing period end at ${now.toISOString()}`,
-    );
+    criticalLog(this.logger, `PERIOD END: Processing at ${now.toISOString()}`);
 
     try {
       // Check what periods are ending
@@ -37,9 +36,7 @@ export class BrandSchedulerService {
       const isEndOfWeek = this.isEndOfWeek(now);
       // Day always ends (it's a new day)
 
-      this.logger.log(
-        `📅 [PERIOD END] Month: ${isEndOfMonth}, Week: ${isEndOfWeek}, Day: true`,
-      );
+      debugLog(this.logger, `PERIOD END: Month: ${isEndOfMonth}, Week: ${isEndOfWeek}, Day: true`);
 
       // Get top brands BEFORE resetting scores
       let topMonthlyBrands: Brand[] = [];
@@ -48,23 +45,17 @@ export class BrandSchedulerService {
 
       if (isEndOfMonth) {
         topMonthlyBrands = await this.getTopBrands('month', 3);
-        this.logger.log(
-          `🏆 [MONTH] Top brands: ${topMonthlyBrands.map((b) => b.name).join(', ')}`,
-        );
+        devLog(this.logger, `MONTH Top brands: ${topMonthlyBrands.map((b) => b.name).join(', ')}`);
       }
 
       if (isEndOfWeek) {
         topWeeklyBrands = await this.getTopBrands('week', 3);
-        this.logger.log(
-          `🏆 [WEEK] Top brands: ${topWeeklyBrands.map((b) => b.name).join(', ')}`,
-        );
+        devLog(this.logger, `WEEK Top brands: ${topWeeklyBrands.map((b) => b.name).join(', ')}`);
       }
 
       // Always get daily top brands
       topDailyBrands = await this.getTopBrands('day', 3);
-      this.logger.log(
-        `🏆 [DAY] Top brands: ${topDailyBrands.map((b) => b.name).join(', ')}`,
-      );
+      devLog(this.logger, `DAY Top brands: ${topDailyBrands.map((b) => b.name).join(', ')}`);
 
       // Reset scores and send notifications
       if (isEndOfMonth) {
@@ -81,7 +72,7 @@ export class BrandSchedulerService {
       await this.resetDailyScores();
       await this.sendDailyNotification(topDailyBrands);
     } catch (error) {
-      this.logger.error('❌ [PERIOD END] Error processing period end:', error);
+      errorLog(this.logger, 'PERIOD END Error:', error);
     }
   }
 
@@ -233,14 +224,12 @@ export class BrandSchedulerService {
    */
   @Cron('0 17 * * *', { timeZone: 'UTC' }) // Every day at 5 PM UTC
   async sendDailyVoteReminder() {
-    this.logger.log(`🔄 [REMINDER] Sending daily vote reminder at 5 PM UTC`);
+    criticalLog(this.logger, 'REMINDER: Sending daily vote reminder');
 
     try {
       // Get top 3 brands of the day so far
       const topDailyBrands = await this.getTopBrands('day', 3);
-      this.logger.log(
-        `🏆 [REMINDER] Top brands today: ${topDailyBrands.map((b) => b.name).join(', ')}`,
-      );
+      devLog(this.logger, `REMINDER Top brands: ${topDailyBrands.map((b) => b.name).join(', ')}`);
 
       const title = 'Vote reminder - top brands!'; // 28 chars - compliant
       const body = this.notificationService.formatPodiumMessage(topDailyBrands);
@@ -254,10 +243,7 @@ export class BrandSchedulerService {
         notificationId,
       );
     } catch (error) {
-      this.logger.error(
-        '❌ [REMINDER] Error sending daily vote reminder:',
-        error,
-      );
+      errorLog(this.logger, 'REMINDER Error:', error);
     }
   }
 
@@ -283,21 +269,17 @@ export class BrandSchedulerService {
       });
 
       // Log health metrics
-      this.logger.log(
-        `📊 Health check - Recent votes: ${recentVotes}, Sample weekly score: ${sampleBrand?.scoreWeek || 0}`,
-      );
+      debugLog(this.logger, `HEALTH: Recent votes: ${recentVotes}, Sample weekly score: ${sampleBrand?.scoreWeek || 0}`);
 
       // Alert if something looks wrong
       if (sampleBrand && recentVotes > 0) {
         const maxExpectedWeekly = recentVotes * 60; // Conservative estimate
         if (sampleBrand.scoreWeek > maxExpectedWeekly * 3) {
-          this.logger.warn(
-            `⚠️ Weekly scores might need manual reset. Current: ${sampleBrand.scoreWeek}, Expected max: ${maxExpectedWeekly}`,
-          );
+          warnLog(this.logger, `HEALTH: Weekly scores high. Current: ${sampleBrand.scoreWeek}, Expected max: ${maxExpectedWeekly}`);
         }
       }
     } catch (error) {
-      this.logger.error('❌ Health check failed:', error);
+      errorLog(this.logger, 'HEALTH Error:', error);
     }
   }
 }
