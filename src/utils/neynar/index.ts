@@ -58,6 +58,7 @@ export default class NeynarService {
         });
         console.log(
           `✅ [NeynarService] Successfully fetched cast on attempt ${attempts + 1}`,
+          response.cast,
         );
         return response.cast;
       } catch (error) {

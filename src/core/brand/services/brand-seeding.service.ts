@@ -23,6 +23,8 @@ interface BrandSeedData {
   ranking?: string;
   score?: number;
   stateScore?: number;
+  scoreDay?: number;
+  stateScoreDay?: number;
   scoreWeek?: number;
   stateScoreWeek?: number;
   rankingWeek?: number;
@@ -289,6 +291,8 @@ export class BrandSeederService {
     brand.ranking = (brandData.ranking ?? '0').toString();
     brand.score = brandData.score ?? 0;
     brand.stateScore = brandData.stateScore ?? 0;
+    brand.scoreDay = brandData.scoreDay ?? 0;
+    brand.stateScoreDay = brandData.stateScoreDay ?? 0;
     brand.scoreWeek = brandData.scoreWeek ?? 0;
     brand.stateScoreWeek = brandData.stateScoreWeek ?? 0;
     brand.rankingWeek = brandData.rankingWeek ?? 0;

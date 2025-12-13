@@ -43,7 +43,7 @@ export class AirdropSnapshot {
   // Relations
   @OneToMany('AirdropLeaf', 'snapshot', {
     cascade: true,
-    onDelete: 'CASCADE'
+    onDelete: 'CASCADE',
   })
   leaves: any[];
 }

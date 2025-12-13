@@ -9,7 +9,12 @@ import { BlockchainModule } from '../blockchain/blockchain.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AirdropScore, AirdropSnapshot, AirdropLeaf, User]),
+    TypeOrmModule.forFeature([
+      AirdropScore,
+      AirdropSnapshot,
+      AirdropLeaf,
+      User,
+    ]),
     forwardRef(() => AuthModule),
     forwardRef(() => BlockchainModule), // Import to access SignatureService
   ],

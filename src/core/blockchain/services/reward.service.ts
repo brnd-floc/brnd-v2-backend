@@ -64,7 +64,7 @@ export class RewardService {
     }
 
     // Extract integer part if it has decimal places
-    let amount = rewardAmount.includes('.')
+    const amount = rewardAmount.includes('.')
       ? rewardAmount.split('.')[0]
       : rewardAmount;
 

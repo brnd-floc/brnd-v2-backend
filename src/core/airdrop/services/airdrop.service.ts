@@ -229,10 +229,10 @@ export class AirdropService {
     const airdropScore = Math.round(userSystemPoints * totalMultiplier);
 
     // Get token allocation and percentage (will be updated later in bulk)
-    let percentage = existingAirdropScore
+    const percentage = existingAirdropScore
       ? Number(existingAirdropScore.percentage) || 0
       : 0;
-    let tokenAllocation = existingAirdropScore
+    const tokenAllocation = existingAirdropScore
       ? Number(existingAirdropScore.tokenAllocation) || 0
       : 0;
 

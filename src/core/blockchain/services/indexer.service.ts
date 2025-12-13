@@ -28,6 +28,129 @@ export class IndexerService {
   ) {}
 
   /**
+   * Checks if a vote date falls within the current week
+   * Week ends on Friday at midnight UTC (Saturday 00:00:00 UTC)
+   * Week runs from Saturday 00:00:00 UTC to Friday 23:59:59 UTC
+   */
+  private isWithinCurrentWeek(voteDate: Date): boolean {
+    const now = new Date();
+    const voteDateUTC = new Date(
+      Date.UTC(
+        voteDate.getUTCFullYear(),
+        voteDate.getUTCMonth(),
+        voteDate.getUTCDate(),
+        voteDate.getUTCHours(),
+        voteDate.getUTCMinutes(),
+        voteDate.getUTCSeconds(),
+      ),
+    );
+    const nowUTC = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds(),
+      ),
+    );
+
+    // Get the current day of week (0 = Sunday, 5 = Friday, 6 = Saturday)
+    const currentDayOfWeek = nowUTC.getUTCDay();
+
+    // Calculate days to subtract to get to the start of current week (Saturday)
+    // If today is Saturday (6), subtract 0 days (week started today)
+    // If today is Sunday (0), subtract 1 day (week started yesterday)
+    // If today is Monday (1), subtract 2 days
+    // ... If today is Friday (5), subtract 6 days (week started last Saturday)
+    const daysToSubtract =
+      currentDayOfWeek === 6 ? 0 : (currentDayOfWeek + 1) % 7;
+
+    // Calculate the start of current week (most recent Saturday at 00:00:00 UTC)
+    const weekStart = new Date(nowUTC);
+    weekStart.setUTCDate(nowUTC.getUTCDate() - daysToSubtract);
+    weekStart.setUTCHours(0, 0, 0, 0);
+
+    // Calculate the end of current week (Friday at 23:59:59.999 UTC)
+    // Week ends when it becomes Saturday 00:00:00 UTC, so Friday 23:59:59.999 is the last moment
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 6); // Add 6 days to get to Friday
+    weekEnd.setUTCHours(23, 59, 59, 999);
+
+    return voteDateUTC >= weekStart && voteDateUTC <= weekEnd;
+  }
+
+  /**
+   * Checks if a vote date falls within the current day
+   * Day runs from 00:00:00 UTC to 23:59:59 UTC
+   * Day ends at midnight UTC (next day 00:00:00 UTC)
+   */
+  private isWithinCurrentDay(voteDate: Date): boolean {
+    const now = new Date();
+    const voteDateUTC = new Date(
+      Date.UTC(
+        voteDate.getUTCFullYear(),
+        voteDate.getUTCMonth(),
+        voteDate.getUTCDate(),
+        voteDate.getUTCHours(),
+        voteDate.getUTCMinutes(),
+        voteDate.getUTCSeconds(),
+      ),
+    );
+    const nowUTC = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds(),
+      ),
+    );
+
+    // Check if vote is on the same day (year, month, and date)
+    return (
+      voteDateUTC.getUTCFullYear() === nowUTC.getUTCFullYear() &&
+      voteDateUTC.getUTCMonth() === nowUTC.getUTCMonth() &&
+      voteDateUTC.getUTCDate() === nowUTC.getUTCDate()
+    );
+  }
+
+  /**
+   * Checks if a vote date falls within the current month
+   * Month ends at the end of the month at midnight UTC
+   */
+  private isWithinCurrentMonth(voteDate: Date): boolean {
+    const now = new Date();
+    const voteDateUTC = new Date(
+      Date.UTC(
+        voteDate.getUTCFullYear(),
+        voteDate.getUTCMonth(),
+        voteDate.getUTCDate(),
+        voteDate.getUTCHours(),
+        voteDate.getUTCMinutes(),
+        voteDate.getUTCSeconds(),
+      ),
+    );
+    const nowUTC = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds(),
+      ),
+    );
+
+    // Check if vote is in the same year and month
+    return (
+      voteDateUTC.getUTCFullYear() === nowUTC.getUTCFullYear() &&
+      voteDateUTC.getUTCMonth() === nowUTC.getUTCMonth()
+    );
+  }
+
+  /**
    * Handles vote submission from the Ponder indexer
    */
   async handleVoteSubmission(voteData: SubmitVoteDto): Promise<void> {
@@ -196,8 +319,6 @@ export class IndexerService {
         case 8:
           brndPaid = 800;
           break;
-        default:
-          brndPaid = 0;
       }
       // Calculate reward amount in wei (brndPaid is in BRND units, convert to wei then multiply by 10)
       // 1 BRND = 10^18 wei, so reward = brndPaid * 10^18 * 10 = brndPaid * 10^19
@@ -230,63 +351,107 @@ export class IndexerService {
       logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
 
       // Update brand scores (60, 30, 10 points for 1st, 2nd, 3rd place)
-      // Update score, scoreWeek, and scoreMonth for all three brands
+      // Always update score, but conditionally update scoreDay, scoreWeek and scoreMonth
+      // based on when the vote was actually cast on-chain
       const score1 = 0.6 * vote.brndPaidWhenCreatingPodium;
       const score2 = 0.3 * vote.brndPaidWhenCreatingPodium;
       const score3 = 0.1 * vote.brndPaidWhenCreatingPodium;
 
       console.log('THE SCORES ARE', score1, score2, score3);
 
-      await Promise.all([
-        // 1st place brand
+      // Check if vote falls within current day, week and month
+      const isInCurrentDay = this.isWithinCurrentDay(voteDate);
+      const isInCurrentWeek = this.isWithinCurrentWeek(voteDate);
+      const isInCurrentMonth = this.isWithinCurrentMonth(voteDate);
+
+      logger.log(
+        `📅 [INDEXER] Vote date: ${voteDate.toISOString()}, In current day: ${isInCurrentDay}, In current week: ${isInCurrentWeek}, In current month: ${isInCurrentMonth}`,
+      );
+
+      // Build array of increment operations conditionally
+      const incrementOperations = [
+        // Always increment score for all brands
         this.brandRepository.increment(
           { id: voteData.brandIds[0] },
           'score',
           score1,
         ),
         this.brandRepository.increment(
-          { id: voteData.brandIds[0] },
-          'scoreWeek',
-          score1,
-        ),
-        this.brandRepository.increment(
-          { id: voteData.brandIds[0] },
-          'scoreMonth',
-          score1,
-        ),
-        // 2nd place brand
-        this.brandRepository.increment(
           { id: voteData.brandIds[1] },
           'score',
           score2,
         ),
         this.brandRepository.increment(
-          { id: voteData.brandIds[1] },
-          'scoreWeek',
-          score2,
-        ),
-        this.brandRepository.increment(
-          { id: voteData.brandIds[1] },
-          'scoreMonth',
-          score2,
-        ),
-        // 3rd place brand
-        this.brandRepository.increment(
           { id: voteData.brandIds[2] },
           'score',
           score3,
         ),
-        this.brandRepository.increment(
-          { id: voteData.brandIds[2] },
-          'scoreWeek',
-          score3,
-        ),
-        this.brandRepository.increment(
-          { id: voteData.brandIds[2] },
-          'scoreMonth',
-          score3,
-        ),
-      ]);
+      ];
+
+      // Conditionally increment scoreDay if vote is in current day
+      if (isInCurrentDay) {
+        incrementOperations.push(
+          this.brandRepository.increment(
+            { id: voteData.brandIds[0] },
+            'scoreDay',
+            score1,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[1] },
+            'scoreDay',
+            score2,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[2] },
+            'scoreDay',
+            score3,
+          ),
+        );
+      }
+
+      // Conditionally increment scoreWeek if vote is in current week
+      if (isInCurrentWeek) {
+        incrementOperations.push(
+          this.brandRepository.increment(
+            { id: voteData.brandIds[0] },
+            'scoreWeek',
+            score1,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[1] },
+            'scoreWeek',
+            score2,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[2] },
+            'scoreWeek',
+            score3,
+          ),
+        );
+      }
+
+      // Conditionally increment scoreMonth if vote is in current month
+      if (isInCurrentMonth) {
+        incrementOperations.push(
+          this.brandRepository.increment(
+            { id: voteData.brandIds[0] },
+            'scoreMonth',
+            score1,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[1] },
+            'scoreMonth',
+            score2,
+          ),
+          this.brandRepository.increment(
+            { id: voteData.brandIds[2] },
+            'scoreMonth',
+            score3,
+          ),
+        );
+      }
+
+      await Promise.all(incrementOperations);
 
       logger.log(`✅ [INDEXER] Updated brand scores for vote: ${voteData.id}`);
 
@@ -372,9 +537,11 @@ export class IndexerService {
           imageUrl: '', // Will need to be populated later
           followerCount: 0, // Will be populated when refreshed
           score: 0,
+          scoreDay: 0,
           scoreWeek: 0,
           scoreMonth: 0,
           stateScore: 0,
+          stateScoreDay: 0,
           stateScoreWeek: 0,
           stateScoreMonth: 0,
           rankingWeek: 0,

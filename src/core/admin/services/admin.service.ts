@@ -3,7 +3,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Brand, Category } from '../../../models';
-import { CreateBrandDto, UpdateBrandDto, PrepareMetadataDto, BlockchainBrandDto } from '../dto';
+import {
+  CreateBrandDto,
+  UpdateBrandDto,
+  PrepareMetadataDto,
+  BlockchainBrandDto,
+} from '../dto';
 import NeynarService from '../../../utils/neynar';
 import { IpfsService } from '../../../utils/ipfs.service';
 import { BlockchainService } from '../../blockchain/services/blockchain.service';
@@ -70,17 +75,23 @@ export class AdminService {
   }
 
   /**
-   * Calculate the last Friday 18:00 UTC when weekly reset happened
+   * Calculate the start of the current week (Saturday 00:00:00 UTC)
+   * Week runs from Saturday 00:00:00 UTC to Friday 23:59:59 UTC
+   * Week ends on Friday at midnight UTC (Saturday 00:00:00 UTC)
    * This uses the same logic as your BrandService deployment time
    */
   private getLastFridayReset(): Date {
     const now = new Date();
     const deploymentTime = new Date('2025-06-20T18:00:00.000Z');
 
-    // Find the first Friday 18:00 UTC after deployment (same as BrandService logic)
+    // Find the first Saturday 00:00:00 UTC after deployment (same as BrandService logic)
     const cycleStart = new Date(deploymentTime);
-    while (cycleStart.getUTCDay() !== 5 || cycleStart.getUTCHours() !== 18) {
-      cycleStart.setTime(cycleStart.getTime() + 60 * 60 * 1000); // Add 1 hour
+    cycleStart.setUTCHours(0, 0, 0, 0); // Set to midnight UTC
+
+    // Find next Saturday 00:00:00 UTC
+    while (cycleStart.getUTCDay() !== 6) {
+      // 6 = Saturday
+      cycleStart.setUTCDate(cycleStart.getUTCDate() + 1); // Add 1 day
     }
 
     // Calculate which cycle we're in
@@ -88,7 +99,7 @@ export class AdminService {
     const timeSinceFirstCycle = now.getTime() - cycleStart.getTime();
     const cycleNumber = Math.floor(timeSinceFirstCycle / msPerWeek) + 1;
 
-    // Return the start of current cycle (last Friday 18:00 UTC)
+    // Return the start of current cycle (most recent Saturday 00:00:00 UTC)
     return new Date(cycleStart.getTime() + (cycleNumber - 1) * msPerWeek);
   }
 
@@ -174,6 +185,8 @@ export class AdminService {
       // Initialize scoring fields (like seeding service)
       score: 0,
       stateScore: 0,
+      scoreDay: 0,
+      stateScoreDay: 0,
       scoreWeek: 0,
       stateScoreWeek: 0,
       scoreMonth: 0,
@@ -395,15 +408,16 @@ export class AdminService {
    * Prepares brand metadata for on-chain creation by uploading to IPFS
    * Validates handle uniqueness and returns IPFS hash
    */
-  async prepareBrandMetadata(
-    prepareMetadataDto: PrepareMetadataDto,
-  ): Promise<{
+  async prepareBrandMetadata(prepareMetadataDto: PrepareMetadataDto): Promise<{
     metadataHash: string;
     handle: string;
     fid: number;
     walletAddress: string;
   }> {
-    console.log('Preparing brand metadata for IPFS upload:', prepareMetadataDto);
+    console.log(
+      'Preparing brand metadata for IPFS upload:',
+      prepareMetadataDto,
+    );
 
     // Validate required fields
     if (!prepareMetadataDto.handle || prepareMetadataDto.handle.trim() === '') {
@@ -476,7 +490,10 @@ export class AdminService {
   async createBrandFromBlockchain(
     blockchainBrandDto: BlockchainBrandDto,
   ): Promise<Brand> {
-    console.log('📋 [INDEXER] Creating brand from blockchain data:', blockchainBrandDto);
+    console.log(
+      '📋 [INDEXER] Creating brand from blockchain data:',
+      blockchainBrandDto,
+    );
 
     try {
       // Check if brand already exists by onChainId
@@ -485,7 +502,9 @@ export class AdminService {
       });
 
       if (existingBrand) {
-        console.log(`⚠️  [INDEXER] Brand with onChainId ${blockchainBrandDto.id} already exists`);
+        console.log(
+          `⚠️  [INDEXER] Brand with onChainId ${blockchainBrandDto.id} already exists`,
+        );
         return existingBrand;
       }
 
@@ -495,7 +514,9 @@ export class AdminService {
       );
 
       if (!contractBrand) {
-        throw new Error(`Brand with ID ${blockchainBrandDto.id} not found in smart contract`);
+        throw new Error(
+          `Brand with ID ${blockchainBrandDto.id} not found in smart contract`,
+        );
       }
 
       // Fetch metadata from IPFS
@@ -506,7 +527,10 @@ export class AdminService {
         );
         console.log('📡 [IPFS] Successfully fetched metadata:', metadata);
       } catch (ipfsError) {
-        console.warn('⚠️  [IPFS] Failed to fetch metadata, using contract data only:', ipfsError.message);
+        console.warn(
+          '⚠️  [IPFS] Failed to fetch metadata, using contract data only:',
+          ipfsError.message,
+        );
       }
 
       // Get or create category with fallback
@@ -550,7 +574,7 @@ export class AdminService {
         onChainWalletAddress: contractBrand.walletAddress,
         onChainCreatedAt: new Date(contractBrand.createdAt * 1000),
         metadataHash: contractBrand.metadataHash,
-        
+
         // Metadata from IPFS (can be updated)
         name: metadata.name || contractBrand.handle,
         url: metadata.url || '',
@@ -583,7 +607,7 @@ export class AdminService {
       });
 
       const savedBrand = await this.brandRepository.save(brand);
-      
+
       console.log('✅ [INDEXER] Brand created successfully from blockchain:', {
         id: savedBrand.id,
         onChainId: savedBrand.onChainId,
@@ -595,8 +619,13 @@ export class AdminService {
 
       return savedBrand;
     } catch (error) {
-      console.error('❌ [INDEXER] Failed to create brand from blockchain:', error);
-      throw new Error(`Failed to create brand from blockchain: ${error.message}`);
+      console.error(
+        '❌ [INDEXER] Failed to create brand from blockchain:',
+        error,
+      );
+      throw new Error(
+        `Failed to create brand from blockchain: ${error.message}`,
+      );
     }
   }
 }

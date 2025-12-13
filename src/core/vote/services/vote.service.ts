@@ -19,7 +19,9 @@ export class VoteService {
    * @param {string} transactionHash - The transaction hash (primary key) of the vote to retrieve.
    * @returns {Promise<UserBrandVotes>} A promise that resolves to an object of the user's votes.
    */
-  async getVotesByTransactionHash(transactionHash: string): Promise<UserBrandVotes> {
+  async getVotesByTransactionHash(
+    transactionHash: string,
+  ): Promise<UserBrandVotes> {
     const userBrandVotes = await this.userBrandVotesRepository.findOne({
       select: ['transactionHash', 'brand1', 'brand2', 'brand3', 'date'],
       where: { transactionHash },

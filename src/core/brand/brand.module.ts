@@ -27,6 +27,7 @@ import {
 import { AuthModule } from '../auth/auth.module';
 import { BrandSchedulerService } from './services/brand-scheduler.service';
 import { BlockchainModule } from '../blockchain/blockchain.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { BlockchainModule } from '../blockchain/blockchain.module';
     ]),
     AuthModule,
     BlockchainModule,
+    NotificationModule,
   ],
   controllers: [BrandController],
   providers: [

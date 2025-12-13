@@ -137,7 +137,7 @@ export class DailyService {
           `⚠️ [DAILY] Found ${existingSnapshotsCount} existing snapshot(s) - skipping airdrop calculations to preserve frozen allocations`,
         );
         logger.log(
-          'ℹ️ [DAILY] Airdrop allocations are frozen after snapshot generation. Daily calculations will resume after snapshot is used/cleared.',
+          'ℹ️ [DAILY] Airdrop allocations dont happen anymore because the snapshot for the airdrop was taken.',
         );
         return;
       }
@@ -148,7 +148,7 @@ export class DailyService {
       const startTime = Date.now();
 
       // Calculate airdrop for all eligible users (top 1111 by points)
-      const result = await this.airdropService.calculateAirdropForAllUsers(20); // Use larger batch size for daily run
+      const result = await this.airdropService.calculateAirdropForAllUsers(88); // Use 0 batch size for daily run because the snapshot for the airdrop was taken.
 
       const endTime = Date.now();
       const duration = Math.round((endTime - startTime) / 1000);

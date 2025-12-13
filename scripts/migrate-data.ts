@@ -215,6 +215,7 @@ async function migrateData() {
     // Step 3: Migrate Brands
     // ========================================================================
     console.log('\nStep 3: Migrating Brands...');
+    // Select all columns - date formatting will be handled in code to preserve exact values
     const [prodBrands] = await prodConnection.execute<mysql.RowDataPacket[]>(
       'SELECT * FROM brands ORDER BY id',
     );
@@ -242,8 +243,14 @@ async function migrateData() {
             if (typeof val === 'number') return val.toString();
             if (typeof val === 'boolean') return val ? '1' : '0';
             if (val instanceof Date) {
-              // Format date as MySQL datetime: YYYY-MM-DD HH:MM:SS
-              return `'${val.toISOString().slice(0, 19).replace('T', ' ')}'`;
+              // Format date preserving local time components (no timezone conversion)
+              const year = val.getFullYear();
+              const month = String(val.getMonth() + 1).padStart(2, '0');
+              const day = String(val.getDate()).padStart(2, '0');
+              const hours = String(val.getHours()).padStart(2, '0');
+              const minutes = String(val.getMinutes()).padStart(2, '0');
+              const seconds = String(val.getSeconds()).padStart(2, '0');
+              return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
             }
             if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
               // Already a date string, just escape
@@ -252,19 +259,31 @@ async function migrateData() {
             return `'${String(val).replace(/'/g, "''")}'`;
           };
 
-          // Helper to format dates specifically
+          // Helper to format dates - preserves exact date from production DB
           const formatDate = (dateVal: any) => {
             if (!dateVal) return 'NOW()'; // Use current timestamp if null
-            if (dateVal instanceof Date) {
-              return `'${dateVal.toISOString().slice(0, 19).replace('T', ' ')}'`;
-            }
+
+            // If it's already a MySQL datetime string, use it directly
             if (typeof dateVal === 'string') {
-              // Try to parse and reformat
-              const parsed = new Date(dateVal);
-              if (!isNaN(parsed.getTime())) {
-                return `'${parsed.toISOString().slice(0, 19).replace('T', ' ')}'`;
+              const mysqlMatch = dateVal.match(
+                /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/,
+              );
+              if (mysqlMatch) {
+                return `'${mysqlMatch[1]} ${mysqlMatch[2]}'`;
               }
             }
+
+            // If it's a Date object, format preserving local time components
+            if (dateVal instanceof Date) {
+              const year = dateVal.getFullYear();
+              const month = String(dateVal.getMonth() + 1).padStart(2, '0');
+              const day = String(dateVal.getDate()).padStart(2, '0');
+              const hours = String(dateVal.getHours()).padStart(2, '0');
+              const minutes = String(dateVal.getMinutes()).padStart(2, '0');
+              const seconds = String(dateVal.getSeconds()).padStart(2, '0');
+              return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
+            }
+
             return 'NOW()'; // Fallback to current timestamp
           };
 
@@ -363,6 +382,7 @@ async function migrateData() {
     // Step 4: Migrate Users
     // ========================================================================
     console.log('\nStep 4: Migrating Users...');
+    // Select all columns - date formatting will be handled in code to preserve exact values
     const [prodUsers] = await prodConnection.execute<mysql.RowDataPacket[]>(
       'SELECT * FROM users ORDER BY id',
     );
@@ -388,8 +408,14 @@ async function migrateData() {
               if (typeof val === 'number') return val.toString();
               if (typeof val === 'boolean') return val ? '1' : '0';
               if (val instanceof Date) {
-                // Format date as MySQL datetime: YYYY-MM-DD HH:MM:SS
-                return `'${val.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                // Format date preserving local time components (no timezone conversion)
+                const year = val.getFullYear();
+                const month = String(val.getMonth() + 1).padStart(2, '0');
+                const day = String(val.getDate()).padStart(2, '0');
+                const hours = String(val.getHours()).padStart(2, '0');
+                const minutes = String(val.getMinutes()).padStart(2, '0');
+                const seconds = String(val.getSeconds()).padStart(2, '0');
+                return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
               }
               if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
                 // Already a date string, just escape
@@ -398,19 +424,31 @@ async function migrateData() {
               return `'${String(val).replace(/'/g, "''")}'`;
             };
 
-            // Helper to format dates specifically
+            // Helper to format dates - preserves exact date from production DB
             const formatDate = (dateVal: any) => {
               if (!dateVal) return 'NOW()'; // Use current timestamp if null
-              if (dateVal instanceof Date) {
-                return `'${dateVal.toISOString().slice(0, 19).replace('T', ' ')}'`;
-              }
+
+              // If it's already a MySQL datetime string, use it directly
               if (typeof dateVal === 'string') {
-                // Try to parse and reformat
-                const parsed = new Date(dateVal);
-                if (!isNaN(parsed.getTime())) {
-                  return `'${parsed.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                const mysqlMatch = dateVal.match(
+                  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/,
+                );
+                if (mysqlMatch) {
+                  return `'${mysqlMatch[1]} ${mysqlMatch[2]}'`;
                 }
               }
+
+              // If it's a Date object, format preserving local time components
+              if (dateVal instanceof Date) {
+                const year = dateVal.getFullYear();
+                const month = String(dateVal.getMonth() + 1).padStart(2, '0');
+                const day = String(dateVal.getDate()).padStart(2, '0');
+                const hours = String(dateVal.getHours()).padStart(2, '0');
+                const minutes = String(dateVal.getMinutes()).padStart(2, '0');
+                const seconds = String(dateVal.getSeconds()).padStart(2, '0');
+                return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
+              }
+
               return 'NOW()'; // Fallback to current timestamp
             };
 
@@ -520,6 +558,7 @@ async function migrateData() {
     // Step 6: Migrate UserBrandVotes
     // ========================================================================
     console.log('\nStep 6: Migrating UserBrandVotes...');
+    // Select all columns - date formatting will be handled in code to preserve exact values
     const [prodVotes] = await prodConnection.execute<mysql.RowDataPacket[]>(
       'SELECT * FROM user_brand_votes ORDER BY id',
     );
@@ -587,18 +626,51 @@ async function migrateData() {
         }
 
         if (validVotes.length > 0) {
-          // Helper to format dates specifically
+          // Helper to format dates - preserves exact date from production DB
+          // MySQL returns dates as Date objects or strings depending on configuration
+          // We preserve the exact value without timezone conversion
           const formatDate = (dateVal: any) => {
             if (!dateVal) return 'NULL';
-            if (dateVal instanceof Date) {
-              return `'${dateVal.toISOString().slice(0, 19).replace('T', ' ')}'`;
-            }
+
+            // If it's already a MySQL datetime string, use it directly (most common case)
             if (typeof dateVal === 'string') {
+              // MySQL datetime format: YYYY-MM-DD HH:MM:SS
+              // Handle both space and T separator, and strip timezone if present
+              const mysqlMatch = dateVal.match(
+                /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/,
+              );
+              if (mysqlMatch) {
+                return `'${mysqlMatch[1]} ${mysqlMatch[2]}'`;
+              }
+              // If it's a different string format, try to parse it
               const parsed = new Date(dateVal);
               if (!isNaN(parsed.getTime())) {
-                return `'${parsed.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                // Format using the date's components (preserves the moment in time)
+                // MySQL DATETIME doesn't store timezone, so we format as-is
+                const year = parsed.getFullYear();
+                const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                const day = String(parsed.getDate()).padStart(2, '0');
+                const hours = String(parsed.getHours()).padStart(2, '0');
+                const minutes = String(parsed.getMinutes()).padStart(2, '0');
+                const seconds = String(parsed.getSeconds()).padStart(2, '0');
+                return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
               }
+              return 'NULL';
             }
+
+            // If it's a Date object (mysql2 returns Date objects by default)
+            if (dateVal instanceof Date) {
+              // Format using the date's local time components
+              // This preserves the exact date/time as stored in MySQL (which doesn't have timezone)
+              const year = dateVal.getFullYear();
+              const month = String(dateVal.getMonth() + 1).padStart(2, '0');
+              const day = String(dateVal.getDate()).padStart(2, '0');
+              const hours = String(dateVal.getHours()).padStart(2, '0');
+              const minutes = String(dateVal.getMinutes()).padStart(2, '0');
+              const seconds = String(dateVal.getSeconds()).padStart(2, '0');
+              return `'${year}-${month}-${day} ${hours}:${minutes}:${seconds}'`;
+            }
+
             return 'NULL';
           };
 

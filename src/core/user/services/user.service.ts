@@ -555,6 +555,8 @@ export class UserService {
           // We don't need the scoring fields for personal rankings
           score: 0,
           stateScore: 0,
+          scoreDay: 0,
+          stateScoreDay: 0,
           ranking: '',
           scoreWeek: 0,
           stateScoreWeek: 0,

@@ -10,7 +10,6 @@ import {
   OneToMany,
 } from 'typeorm';
 
-
 /**
  * @class Brand
  * @classdesc Brand class represents a brand in the system.

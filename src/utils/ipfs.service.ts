@@ -63,11 +63,14 @@ export class IpfsService {
         },
       };
 
-      const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(pinataBody),
-      });
+      const response = await fetch(
+        'https://api.pinata.cloud/pinning/pinJSONToIPFS',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(pinataBody),
+        },
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -89,4 +92,3 @@ export class IpfsService {
     }
   }
 }
-

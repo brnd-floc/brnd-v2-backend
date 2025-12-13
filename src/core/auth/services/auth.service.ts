@@ -67,7 +67,7 @@ export class AuthService implements OnModuleInit {
 
     try {
       logger.log('Verifying QuickAuth token:', token);
-      const domain = 'www.brnd.land';
+      const domain = 'brnd.land';
       logger.log('Domain:', domain);
       const payload = await this.farcasterClient.verifyJwt({ token, domain });
       logger.log('Payload:', payload);

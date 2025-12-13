@@ -41,7 +41,7 @@ export class AirdropLeaf {
 
   // Relations
   @ManyToOne('AirdropSnapshot', 'leaves', {
-    onDelete: 'CASCADE'
+    onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'snapshotId' })
   snapshot: any;

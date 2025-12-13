@@ -1,10 +1,18 @@
 // src/core/notification/notification.controller.ts
 
-import { Controller, Get, Post, HttpStatus, Res, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  HttpStatus,
+  Res,
+  Logger,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { hasResponse, hasError } from '../../utils';
-import { NeynarNotificationService } from './services';
+import { FarcasterNotificationService } from './services';
 
 @ApiTags('notification-service')
 @Controller('notification-service')
@@ -12,19 +20,18 @@ export class NotificationController {
   private readonly logger = new Logger(NotificationController.name);
 
   constructor(
-    private readonly neynarNotificationService: NeynarNotificationService,
+    private readonly farcasterNotificationService: FarcasterNotificationService,
   ) {}
 
   /**
-   * Health check endpoint for Neynar notification system
+   * Health check endpoint for Farcaster notification system
    */
   @Get('/health')
   async healthCheck(@Res() res: Response): Promise<Response> {
     try {
-      const health = await this.neynarNotificationService.healthCheck();
-
       return hasResponse(res, {
-        ...health,
+        status: 'ok',
+        message: 'Farcaster notification service is operational',
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -32,6 +39,81 @@ export class NotificationController {
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
         'healthCheck',
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Farcaster webhook endpoint for frame added/removed actions
+   * This endpoint receives notification tokens when users add/remove the frame
+   */
+  @Post('/farcaster-webhook')
+  async farcasterWebhook(
+    @Body() body: any,
+    @Res() res: Response,
+  ): Promise<Response> {
+    try {
+      this.logger.log('📥 Received Farcaster webhook', JSON.stringify(body));
+
+      // Extract data from webhook payload
+      const { action, fid, notificationToken } = body;
+
+      if (!action || !fid) {
+        this.logger.warn('⚠️ Invalid webhook payload - missing action or fid');
+        return hasError(
+          res,
+          HttpStatus.BAD_REQUEST,
+          'farcasterWebhook',
+          'Invalid payload: action and fid are required',
+        );
+      }
+
+      if (action === 'frame_added' && notificationToken) {
+        // Store the notification token for the user
+        await this.farcasterNotificationService.storeNotificationToken(
+          fid,
+          notificationToken,
+        );
+
+        this.logger.log(`✅ Frame added for FID ${fid}, token stored`);
+
+        return hasResponse(res, {
+          status: 'success',
+          message: 'Notification token stored successfully',
+          fid,
+          action,
+        });
+      } else if (action === 'frame_removed') {
+        // Remove notification token (set to null)
+        await this.farcasterNotificationService.storeNotificationToken(
+          fid,
+          null,
+        );
+
+        this.logger.log(`🗑️ Frame removed for FID ${fid}, token cleared`);
+
+        return hasResponse(res, {
+          status: 'success',
+          message: 'Notification token removed successfully',
+          fid,
+          action,
+        });
+      } else {
+        this.logger.warn(`⚠️ Unhandled action: ${action}`);
+        return hasResponse(res, {
+          status: 'ignored',
+          message: `Action '${action}' was received but not handled`,
+          fid,
+          action,
+        });
+      }
+    } catch (error) {
+      this.logger.error('❌ Error processing Farcaster webhook:', error);
+      return hasError(
+        res,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'farcasterWebhook',
         error.message,
       );
     }

@@ -5,16 +5,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { NotificationController } from './notification.controller';
-import { NeynarNotificationService, NotificationScheduler } from './services';
-import { User } from '../../models';
+import { FarcasterNotificationService } from './services';
+import { User, UserBrandVotes } from '../../models';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, UserBrandVotes]),
     ScheduleModule.forRoot(),
   ],
   controllers: [NotificationController],
-  providers: [NeynarNotificationService, NotificationScheduler],
-  exports: [NeynarNotificationService],
+  providers: [FarcasterNotificationService],
+  exports: [FarcasterNotificationService],
 })
 export class NotificationModule {}

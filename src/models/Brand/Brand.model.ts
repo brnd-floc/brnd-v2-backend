@@ -58,6 +58,16 @@ export class Brand {
   @Column()
   stateScore: number;
 
+  @Column({
+    default: 0,
+  })
+  scoreDay: number;
+
+  @Column({
+    default: 0,
+  })
+  stateScoreDay: number;
+
   @Column()
   scoreWeek: number;
 

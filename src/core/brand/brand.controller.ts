@@ -32,7 +32,7 @@ import { Session } from '../../security/decorators';
 import { getConfig } from '../../security/config';
 import NeynarService from 'src/utils/neynar';
 
-export type BrandTimePeriod = 'week' | 'month' | 'all';
+export type BrandTimePeriod = 'day' | 'week' | 'month' | 'all';
 
 @ApiTags('brand-service')
 @Controller('brand-service')
@@ -245,116 +245,116 @@ export class BrandController {
     });
   }
 
-  /**
-   * Records votes for multiple brands.
-   *
-   * @param {CurrentUser} user - The current user session.
-   * @param {{ ids: string[] }} ids - An object containing an array of brand IDs to vote for.
-   * @param {Response} res - The response object.
-   * @returns {Promise<Response>} A response object indicating the result of the vote operation.
-   */
-  @Post('/vote')
-  @UseGuards(AuthorizationGuard)
-  async voteBrands(
-    @Session() user: QuickAuthPayload, // Get FID from QuickAuth token
-    @Body() { ids }: { ids: number[] },
-    @Res() res: Response,
-  ): Promise<Response> {
-    console.log(
-      '🗳️ [VoteBrands] User FID:',
-      user.sub,
-      'attempting to vote with IDs:',
-      ids.join(', '),
-    );
+  // /**
+  //  * Records votes for multiple brands.
+  //  *
+  //  * @param {CurrentUser} user - The current user session.
+  //  * @param {{ ids: string[] }} ids - An object containing an array of brand IDs to vote for.
+  //  * @param {Response} res - The response object.
+  //  * @returns {Promise<Response>} A response object indicating the result of the vote operation.
+  //  */
+  // @Post('/vote')
+  // @UseGuards(AuthorizationGuard)
+  // async voteBrands(
+  //   @Session() user: QuickAuthPayload, // Get FID from QuickAuth token
+  //   @Body() { ids }: { ids: number[] },
+  //   @Res() res: Response,
+  // ): Promise<Response> {
+  //   console.log(
+  //     '🗳️ [VoteBrands] User FID:',
+  //     user.sub,
+  //     'attempting to vote with IDs:',
+  //     ids.join(', '),
+  //   );
 
-    try {
-      // Validate request body
-      if (!ids || !Array.isArray(ids)) {
-        return hasError(
-          res,
-          HttpStatus.BAD_REQUEST,
-          'voteBrands',
-          'Invalid request: ids must be an array',
-        );
-      }
+  //   try {
+  //     // Validate request body
+  //     if (!ids || !Array.isArray(ids)) {
+  //       return hasError(
+  //         res,
+  //         HttpStatus.BAD_REQUEST,
+  //         'voteBrands',
+  //         'Invalid request: ids must be an array',
+  //       );
+  //     }
 
-      if (ids.length !== 3) {
-        return hasError(
-          res,
-          HttpStatus.BAD_REQUEST,
-          'voteBrands',
-          'Invalid request: must provide exactly 3 brand IDs',
-        );
-      }
+  //     if (ids.length !== 3) {
+  //       return hasError(
+  //         res,
+  //         HttpStatus.BAD_REQUEST,
+  //         'voteBrands',
+  //         'Invalid request: must provide exactly 3 brand IDs',
+  //       );
+  //     }
 
-      // Check for duplicate IDs
-      const uniqueIds = new Set(ids);
-      if (uniqueIds.size !== 3) {
-        return hasError(
-          res,
-          HttpStatus.BAD_REQUEST,
-          'voteBrands',
-          'Invalid request: all brand IDs must be different',
-        );
-      }
+  //     // Check for duplicate IDs
+  //     const uniqueIds = new Set(ids);
+  //     if (uniqueIds.size !== 3) {
+  //       return hasError(
+  //         res,
+  //         HttpStatus.BAD_REQUEST,
+  //         'voteBrands',
+  //         'Invalid request: all brand IDs must be different',
+  //       );
+  //     }
 
-      console.log(
-        '✅ [VoteBrands] Vote validation passed, submitting votes...',
-      );
+  //     console.log(
+  //       '✅ [VoteBrands] Vote validation passed, submitting votes...',
+  //     );
 
-      // Use user.sub (FID) - the brandService will find the user in the database
-      const votes = await this.brandService.voteForBrands(user.sub, ids);
+  //     // Use user.sub (FID) - the brandService will find the user in the database
+  //     const votes = await this.brandService.voteForBrands(user.sub, ids);
 
-      return hasResponse(res, {
-        transactionHash: votes.transactionHash,
-        date: votes.date,
-        brand1: {
-          id: votes.brand1.id,
-          name: votes.brand1.name,
-          imageUrl: votes.brand1.imageUrl,
-        },
-        brand2: {
-          id: votes.brand2.id,
-          name: votes.brand2.name,
-          imageUrl: votes.brand2.imageUrl,
-        },
-        brand3: {
-          id: votes.brand3.id,
-          name: votes.brand3.name,
-          imageUrl: votes.brand3.imageUrl,
-        },
-        message: 'Vote submitted successfully',
-        bot_cast_hash: votes.bot_cast_hash,
-      });
-    } catch (error) {
-      console.error('❌ [VoteBrands] Voting error:', error);
+  //     return hasResponse(res, {
+  //       transactionHash: votes.transactionHash,
+  //       date: votes.date,
+  //       brand1: {
+  //         id: votes.brand1.id,
+  //         name: votes.brand1.name,
+  //         imageUrl: votes.brand1.imageUrl,
+  //       },
+  //       brand2: {
+  //         id: votes.brand2.id,
+  //         name: votes.brand2.name,
+  //         imageUrl: votes.brand2.imageUrl,
+  //       },
+  //       brand3: {
+  //         id: votes.brand3.id,
+  //         name: votes.brand3.name,
+  //         imageUrl: votes.brand3.imageUrl,
+  //       },
+  //       message: 'Vote submitted successfully',
+  //       bot_cast_hash: votes.bot_cast_hash,
+  //     });
+  //   } catch (error) {
+  //     console.error('❌ [VoteBrands] Voting error:', error);
 
-      // Handle specific error types
-      if (error.message.includes('already voted')) {
-        return hasError(res, HttpStatus.CONFLICT, 'voteBrands', error.message);
-      }
+  //     // Handle specific error types
+  //     if (error.message.includes('already voted')) {
+  //       return hasError(res, HttpStatus.CONFLICT, 'voteBrands', error.message);
+  //     }
 
-      if (error.message.includes('not found')) {
-        return hasError(res, HttpStatus.NOT_FOUND, 'voteBrands', error.message);
-      }
+  //     if (error.message.includes('not found')) {
+  //       return hasError(res, HttpStatus.NOT_FOUND, 'voteBrands', error.message);
+  //     }
 
-      if (error.message.includes('do not exist')) {
-        return hasError(
-          res,
-          HttpStatus.BAD_REQUEST,
-          'voteBrands',
-          error.message,
-        );
-      }
+  //     if (error.message.includes('do not exist')) {
+  //       return hasError(
+  //         res,
+  //         HttpStatus.BAD_REQUEST,
+  //         'voteBrands',
+  //         error.message,
+  //       );
+  //     }
 
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'voteBrands',
-        'An unexpected error occurred while processing your vote',
-      );
-    }
-  }
+  //     return hasError(
+  //       res,
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //       'voteBrands',
+  //       'An unexpected error occurred while processing your vote',
+  //     );
+  //   }
+  // }
 
   /**
    * Verifies a shared cast and awards points for valid shares.
@@ -491,6 +491,7 @@ export class BrandController {
       try {
         const neynar = new NeynarService();
         const castData = await neynar.getCastByHash(castHash);
+        console.log('CAST DATA', castData, user);
         // Verify the cast author FID matches the user
         if (castData.author.fid !== user.sub) {
           return hasError(
@@ -503,7 +504,11 @@ export class BrandController {
 
         // Verify the cast contains the correct embed URL
         // Accept both brnd.land or rebrnd.lat as valid base URLs in the embed
-        const validEmbedUrls = ['https://brnd.land', 'https://rebrnd.lat'];
+        const validEmbedUrls = [
+          'https://brnd.land',
+          'https://rebrnd.lat',
+          'https://www.brnd.land',
+        ];
 
         // Find embed that matches any of our valid URLs and has the url property
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {

@@ -235,32 +235,83 @@ export class BrandService {
   /**
    * Calculate cycle information (when it started, when it ends, time remaining)
    */
-  private calculateCycleInfo(period: 'week' | 'month') {
+  private calculateCycleInfo(period: 'week' | 'month' | 'day') {
     const deploymentTime = this.getDeploymentTime();
     const currentTime = new Date();
 
+    if (period === 'day') {
+      return this.calculateDailyCycle(currentTime);
+    }
     if (period === 'week') {
-      // Weekly cycles: Friday 3pm Chile time
+      // Weekly cycles: Friday at midnight UTC (Saturday 00:00:00 UTC)
       return this.calculateWeeklyCycle(deploymentTime, currentTime);
     } else {
       // Monthly cycles: 1st of month, 9 AM UTC (as mentioned in your docs)
       return this.calculateMonthlyCycle(currentTime);
     }
   }
+  /**
+   * Calculate daily cycle information
+   * Day runs from 00:00:00 UTC to 23:59:59 UTC
+   * Day ends at midnight UTC (next day 00:00:00 UTC)
+   */
+  private calculateDailyCycle(currentTime: Date) {
+    const currentYear = currentTime.getUTCFullYear();
+    const currentMonth = currentTime.getUTCMonth();
+    const currentDay = currentTime.getUTCDate();
 
+    // Current day cycle starts at 00:00:00 UTC
+    const currentCycleStart = new Date(
+      Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0),
+    );
+
+    // Current day cycle ends at midnight UTC (next day 00:00:00 UTC)
+    const currentCycleEnd = new Date(
+      Date.UTC(currentYear, currentMonth, currentDay + 1, 0, 0, 0),
+    );
+
+    const timeRemaining = currentCycleEnd.getTime() - currentTime.getTime();
+
+    // Calculate cycle number (days since deployment - June 20, 2025)
+    const deploymentDate = new Date(Date.UTC(2025, 5, 20, 0, 0, 0)); // June 20, 2025
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysDiff = Math.floor(
+      (currentCycleStart.getTime() - deploymentDate.getTime()) / msPerDay,
+    );
+    const cycleNumber = daysDiff + 1;
+
+    return {
+      period: 'day',
+      cycleNumber,
+      startTime: currentCycleStart.toISOString(),
+      endTime: currentCycleEnd.toISOString(),
+      timeRemaining: {
+        milliseconds: timeRemaining,
+        days: Math.floor(timeRemaining / (1000 * 60 * 60 * 24)),
+        hours: Math.floor(
+          (timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+        ),
+        minutes: Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60)),
+      },
+      isActive: timeRemaining > 0,
+      nextCycleStart: new Date(currentCycleEnd.getTime()).toISOString(),
+    };
+  }
   /**
    * Calculate weekly cycle information
+   * Week runs from Saturday 00:00:00 UTC to Friday 23:59:59 UTC
+   * Week ends on Friday at midnight UTC (Saturday 00:00:00 UTC)
    */
   private calculateWeeklyCycle(deploymentTime: Date, currentTime: Date) {
-    // Convert deployment time to Santiago timezone for calculation
-    // Find the first Friday 3pm after deployment
+    // Find the first Saturday 00:00:00 UTC after deployment
     const cycleStart = new Date(deploymentTime);
+    cycleStart.setUTCHours(0, 0, 0, 0); // Set to midnight UTC
 
-    // If deployment was exactly Friday 3pm, that's cycle 1 start
-    // Otherwise, find next Friday 3pm
-    while (cycleStart.getUTCDay() !== 5 || cycleStart.getUTCHours() !== 18) {
-      // 18 UTC = 3pm Chile
-      cycleStart.setTime(cycleStart.getTime() + 60 * 60 * 1000); // Add 1 hour
+    // If deployment was exactly Saturday 00:00:00 UTC, that's cycle 1 start
+    // Otherwise, find next Saturday 00:00:00 UTC
+    while (cycleStart.getUTCDay() !== 6) {
+      // 6 = Saturday
+      cycleStart.setUTCDate(cycleStart.getUTCDate() + 1); // Add 1 day
     }
 
     // Calculate which cycle we're in
@@ -296,25 +347,26 @@ export class BrandService {
 
   /**
    * Calculate monthly cycle information
+   * Month runs from 1st day 00:00:00 UTC to last day 23:59:59 UTC
+   * Month ends at midnight UTC of the last day (1st of next month 00:00:00 UTC)
    */
   private calculateMonthlyCycle(currentTime: Date) {
     const currentYear = currentTime.getUTCFullYear();
     const currentMonth = currentTime.getUTCMonth();
 
-    // Current month cycle: 1st day, 9 AM UTC
+    // Current month cycle starts on 1st day at 00:00:00 UTC
     const currentCycleStart = new Date(
-      Date.UTC(currentYear, currentMonth, 1, 9, 0, 0),
+      Date.UTC(currentYear, currentMonth, 1, 0, 0, 0),
     );
 
-    // Next month cycle start
+    // Current month cycle ends at midnight UTC of the last day (1st of next month 00:00:00 UTC)
     const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
     const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-    const currentCycleEnd = new Date(Date.UTC(nextYear, nextMonth, 1, 9, 0, 0));
+    const currentCycleEnd = new Date(Date.UTC(nextYear, nextMonth, 1, 0, 0, 0));
 
     const timeRemaining = currentCycleEnd.getTime() - currentTime.getTime();
 
-    // Calculate cycle number since June 2025 (when you deployed)
-    const deploymentMonth = new Date(2025, 5, 1); // June 2025
+    // Calculate cycle number since June 2025
     const monthsDiff = (currentYear - 2025) * 12 + currentMonth - 5;
     const cycleNumber = monthsDiff + 1;
 
@@ -894,12 +946,8 @@ export class BrandService {
     const hasSearch = searchName !== '';
     const skip = (pageId - 1) * limit;
 
-    // Calculate period dates
-    const cycleInfo = this.calculateCycleInfo(period as 'week' | 'month');
-    const periodStart = new Date(cycleInfo.startTime);
-    const now = new Date();
-
     // Get all brands first (for counting and filtering)
+    // Note: Period scores (scoreWeek, scoreMonth) are maintained by cron jobs
     const allBrands = await this.brandRepository.find({
       ...(select.length > 0 && {
         select,
@@ -917,39 +965,26 @@ export class BrandService {
 
     const totalCount = allBrands.length;
 
-    // Calculate period scores for each brand
-    const brandScoresMap = new Map<number, number>();
-
-    // Get all votes for the current period
-    const periodVotes = await this.userBrandVotesRepository
-      .createQueryBuilder('vote')
-      .leftJoinAndSelect('vote.brand1', 'brand1')
-      .leftJoinAndSelect('vote.brand2', 'brand2')
-      .leftJoinAndSelect('vote.brand3', 'brand3')
-      .where('vote.date > :periodStart', { periodStart })
-      .andWhere('vote.date <= :now', { now })
-      .getMany();
-
-    // Calculate scores from votes
-    for (const vote of periodVotes) {
-      if (vote.brand1) {
-        const currentScore = brandScoresMap.get(vote.brand1.id) || 0;
-        brandScoresMap.set(vote.brand1.id, currentScore + 60);
+    // Use the appropriate score field from Brand model based on period
+    // Cron jobs will maintain these scores, so we just read them directly
+    const getPeriodScore = (brand: Brand): number => {
+      switch (period) {
+        case 'day':
+          return brand.scoreDay || 0;
+        case 'week':
+          return brand.scoreWeek || 0;
+        case 'month':
+          return brand.scoreMonth || 0;
+        case 'all':
+        default:
+          return brand.score || 0;
       }
-      if (vote.brand2) {
-        const currentScore = brandScoresMap.get(vote.brand2.id) || 0;
-        brandScoresMap.set(vote.brand2.id, currentScore + 30);
-      }
-      if (vote.brand3) {
-        const currentScore = brandScoresMap.get(vote.brand3.id) || 0;
-        brandScoresMap.set(vote.brand3.id, currentScore + 10);
-      }
-    }
+    };
 
     // Add period scores to brands and sort
     const brandsWithPeriodScores = allBrands.map((brand) => ({
       ...brand,
-      periodScore: brandScoresMap.get(brand.id) || 0,
+      periodScore: getPeriodScore(brand),
     }));
 
     // Sort by period score and apply pagination
@@ -1006,14 +1041,13 @@ export class BrandService {
     page: number = 1,
     limit: number = 20,
   ): Promise<[UserBrandVotes[], number]> {
+    // Filter for podiums more recent than 2025-12-12 14:14:14
+    const minDate = new Date('2025-12-12T14:14:14');
     console.log(
-      `🏆 [BrandService] Getting recent podiums - page: ${page}, limit: ${limit}`,
+      `🏆 [BrandService] Getting recent podiums - page: ${page}, limit: ${limit}, minDate: ${minDate}`,
     );
 
     const skip = (page - 1) * limit;
-
-    // Filter for podiums more recent than 2025-12-12 14:14:14
-    const minDate = new Date('2025-12-12T14:14:14');
 
     // Use QueryBuilder for better performance
     // transactionHash is primary key, so it can't be null - no need to check
@@ -1023,6 +1057,7 @@ export class BrandService {
 
     // Get count first (without joins for speed)
     const count = await baseQuery.getCount();
+    console.log('THE COUNT IS', count);
 
     // Get data with relations
     const podiums = await baseQuery

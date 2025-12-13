@@ -535,15 +535,16 @@ export class BlockchainController {
    */
   @Post('/brands')
   @UseGuards(IndexerGuard)
-  async createBrandFromBlockchain(@Body() blockchainBrandDto: BlockchainBrandDto) {
+  async createBrandFromBlockchain(
+    @Body() blockchainBrandDto: BlockchainBrandDto,
+  ) {
     try {
       logger.log(
         `📋 [INDEXER] Received brand creation: ${blockchainBrandDto.id} - ${blockchainBrandDto.handle}`,
       );
 
-      const brand = await this.adminService.createBrandFromBlockchain(
-        blockchainBrandDto,
-      );
+      const brand =
+        await this.adminService.createBrandFromBlockchain(blockchainBrandDto);
 
       return {
         success: true,

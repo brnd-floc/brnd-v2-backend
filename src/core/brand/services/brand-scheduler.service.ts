@@ -4,72 +4,260 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Brand, UserBrandVotes } from '../../../models';
+import { FarcasterNotificationService } from '../../notification/services';
+import { getConfig } from '../../../security/config';
 
 @Injectable()
 export class BrandSchedulerService {
   private readonly logger = new Logger(BrandSchedulerService.name);
+  private readonly miniappUrl = getConfig().notifications.miniappUrl;
 
   constructor(
     @InjectRepository(Brand)
     private readonly brandRepository: Repository<Brand>,
     @InjectRepository(UserBrandVotes)
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
+    private readonly notificationService: FarcasterNotificationService,
   ) {}
 
   /**
-   * Reset weekly scores every Friday at 3:00 PM Chile time (18:00 UTC)
-   * Runs automatically, no API calls needed
+   * Unified cron job that runs every day at midnight UTC
+   * Handles day, week, and month endings with priority: Month > Week > Day
    */
-  @Cron('0 18 * * 5', { timeZone: 'UTC' }) // Every Friday at 18:00 UTC
-  async resetWeeklyScores() {
-    this.logger.log('🔄 Starting automatic weekly score reset...');
+  @Cron('0 0 * * *', { timeZone: 'UTC' }) // Every day at midnight UTC
+  async handlePeriodEnd() {
+    const now = new Date();
+    this.logger.log(
+      `🔄 [PERIOD END] Processing period end at ${now.toISOString()}`,
+    );
 
     try {
-      // Reset all weekly scores to 0
-      const updateResult = await this.brandRepository.update(
-        {},
-        {
-          scoreWeek: 0,
-          stateScoreWeek: 0,
-          rankingWeek: 0,
-        },
-      );
+      // Check what periods are ending
+      const isEndOfMonth = this.isEndOfMonth(now);
+      const isEndOfWeek = this.isEndOfWeek(now);
+      // Day always ends (it's a new day)
 
       this.logger.log(
-        `✅ Reset weekly scores for ${updateResult.affected} brands`,
+        `📅 [PERIOD END] Month: ${isEndOfMonth}, Week: ${isEndOfWeek}, Day: true`,
       );
 
-      // Emit event or notification here if needed
+      // Get top brands BEFORE resetting scores
+      let topMonthlyBrands: Brand[] = [];
+      let topWeeklyBrands: Brand[] = [];
+      let topDailyBrands: Brand[] = [];
+
+      if (isEndOfMonth) {
+        topMonthlyBrands = await this.getTopBrands('month', 3);
+        this.logger.log(
+          `🏆 [MONTH] Top brands: ${topMonthlyBrands.map((b) => b.name).join(', ')}`,
+        );
+      }
+
+      if (isEndOfWeek) {
+        topWeeklyBrands = await this.getTopBrands('week', 3);
+        this.logger.log(
+          `🏆 [WEEK] Top brands: ${topWeeklyBrands.map((b) => b.name).join(', ')}`,
+        );
+      }
+
+      // Always get daily top brands
+      topDailyBrands = await this.getTopBrands('day', 3);
+      this.logger.log(
+        `🏆 [DAY] Top brands: ${topDailyBrands.map((b) => b.name).join(', ')}`,
+      );
+
+      // Reset scores and send notifications
+      if (isEndOfMonth) {
+        await this.resetMonthlyScores();
+        await this.sendMonthlyNotification(topMonthlyBrands);
+      }
+
+      if (isEndOfWeek) {
+        await this.resetWeeklyScores();
+        await this.sendWeeklyNotification(topWeeklyBrands);
+      }
+
+      // Always reset daily scores
+      await this.resetDailyScores();
+      await this.sendDailyNotification(topDailyBrands);
     } catch (error) {
-      this.logger.error('❌ Failed to reset weekly scores:', error);
+      this.logger.error('❌ [PERIOD END] Error processing period end:', error);
     }
   }
 
   /**
-   * Reset monthly scores on 1st of every month at 9:00 AM UTC
-   * Runs automatically, no API calls needed
+   * Check if current date is end of month (last day at midnight UTC)
    */
-  @Cron('0 9 1 * *', { timeZone: 'UTC' }) // 1st day of month at 9:00 UTC
-  async resetMonthlyScores() {
-    this.logger.log('🔄 Starting automatic monthly score reset...');
+  private isEndOfMonth(date: Date): boolean {
+    const tomorrow = new Date(date);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    return tomorrow.getUTCDate() === 1; // Next day is 1st of month
+  }
+
+  /**
+   * Check if current date is end of week (Friday at midnight UTC = Saturday 00:00 UTC)
+   * Week runs from Saturday 00:00 UTC to Friday 23:59 UTC
+   */
+  private isEndOfWeek(date: Date): boolean {
+    const dayOfWeek = date.getUTCDay();
+    return dayOfWeek === 6; // Saturday 00:00 UTC = end of week (Friday just ended)
+  }
+
+  /**
+   * Get top N brands for a given period
+   */
+  private async getTopBrands(
+    period: 'day' | 'week' | 'month',
+    limit: number,
+  ): Promise<Brand[]> {
+    const scoreField =
+      period === 'day'
+        ? 'scoreDay'
+        : period === 'week'
+          ? 'scoreWeek'
+          : 'scoreMonth';
+
+    return await this.brandRepository.find({
+      where: { banned: 0 },
+      order: { [scoreField]: 'DESC' },
+      take: limit,
+    });
+  }
+
+  /**
+   * Reset daily scores
+   */
+  private async resetDailyScores(): Promise<void> {
+    const updateResult = await this.brandRepository.update(
+      {},
+      {
+        scoreDay: 0,
+        stateScoreDay: 0,
+      },
+    );
+    this.logger.log(
+      `✅ Reset daily scores for ${updateResult.affected} brands`,
+    );
+  }
+
+  /**
+   * Reset weekly scores
+   */
+  private async resetWeeklyScores(): Promise<void> {
+    const updateResult = await this.brandRepository.update(
+      {},
+      {
+        scoreWeek: 0,
+        stateScoreWeek: 0,
+        rankingWeek: 0,
+      },
+    );
+    this.logger.log(
+      `✅ Reset weekly scores for ${updateResult.affected} brands`,
+    );
+  }
+
+  /**
+   * Reset monthly scores
+   */
+  private async resetMonthlyScores(): Promise<void> {
+    const updateResult = await this.brandRepository.update(
+      {},
+      {
+        scoreMonth: 0,
+        stateScoreMonth: 0,
+        rankingMonth: 0,
+      },
+    );
+    this.logger.log(
+      `✅ Reset monthly scores for ${updateResult.affected} brands`,
+    );
+  }
+
+  /**
+   * Send daily notification
+   */
+  private async sendDailyNotification(brands: Brand[]): Promise<void> {
+    const title = 'Vote for farcaster brands!'; // 26 chars - compliant
+    const body = this.notificationService.formatPodiumMessage(brands);
+    const notificationId = `daily-${new Date().toISOString().split('T')[0]}`;
+
+    await this.notificationService.sendNotificationToAllUsers(
+      title,
+      body,
+      this.miniappUrl,
+      notificationId,
+    );
+  }
+
+  /**
+   * Send weekly notification
+   */
+  private async sendWeeklyNotification(brands: Brand[]): Promise<void> {
+    const title = 'Top brands of the week';
+    const body = this.notificationService.formatPodiumMessage(brands);
+    const now = new Date();
+    const weekEnd = new Date(now);
+    weekEnd.setUTCDate(now.getUTCDate() - 1); // Yesterday (Friday)
+    const notificationId = `weekly-${weekEnd.toISOString().split('T')[0]}`;
+
+    await this.notificationService.sendNotificationToAllUsers(
+      title,
+      body,
+      this.miniappUrl,
+      notificationId,
+    );
+  }
+
+  /**
+   * Send monthly notification
+   */
+  private async sendMonthlyNotification(brands: Brand[]): Promise<void> {
+    const title = 'Top brands of the month';
+    const body = this.notificationService.formatPodiumMessage(brands);
+    const now = new Date();
+    const lastMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+    const notificationId = `monthly-${lastMonth.getUTCFullYear()}-${String(lastMonth.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    await this.notificationService.sendNotificationToAllUsers(
+      title,
+      body,
+      this.miniappUrl,
+      notificationId,
+    );
+  }
+
+  /**
+   * Daily reminder at 5 PM UTC for users who haven't voted
+   * Shows top 3 brands of the day so far
+   */
+  @Cron('0 17 * * *', { timeZone: 'UTC' }) // Every day at 5 PM UTC
+  async sendDailyVoteReminder() {
+    this.logger.log(`🔄 [REMINDER] Sending daily vote reminder at 5 PM UTC`);
 
     try {
-      const updateResult = await this.brandRepository.update(
-        {},
-        {
-          scoreMonth: 0,
-          stateScoreMonth: 0,
-          rankingMonth: 0,
-        },
-      );
-
+      // Get top 3 brands of the day so far
+      const topDailyBrands = await this.getTopBrands('day', 3);
       this.logger.log(
-        `✅ Reset monthly scores for ${updateResult.affected} brands`,
+        `🏆 [REMINDER] Top brands today: ${topDailyBrands.map((b) => b.name).join(', ')}`,
       );
 
-      // Notify admins or trigger winner announcement here
+      const title = 'Vote reminder - top brands!'; // 28 chars - compliant
+      const body = this.notificationService.formatPodiumMessage(topDailyBrands);
+      const today = new Date().toISOString().split('T')[0];
+      const notificationId = `reminder-${today}`;
+
+      await this.notificationService.sendNotificationToNonVoters(
+        title,
+        body,
+        this.miniappUrl,
+        notificationId,
+      );
     } catch (error) {
-      this.logger.error('❌ Failed to reset monthly scores:', error);
+      this.logger.error(
+        '❌ [REMINDER] Error sending daily vote reminder:',
+        error,
+      );
     }
   }
 

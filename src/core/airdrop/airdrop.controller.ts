@@ -388,12 +388,19 @@ export class AirdropController {
       );
 
       // Check if snapshot already exists - warn but allow manual override via API
-      const existingSnapshotsCount = await this.airdropService.airdropSnapshotRepository.count();
-      
+      const existingSnapshotsCount =
+        await this.airdropService.airdropSnapshotRepository.count();
+
       if (existingSnapshotsCount > 0) {
-        console.warn(`⚠️ [CONTROLLER] WARNING: ${existingSnapshotsCount} existing snapshot(s) found!`);
-        console.warn('⚠️ [CONTROLLER] API calculation will proceed but may overwrite frozen allocations.');
-        console.warn('ℹ️ [CONTROLLER] Consider clearing snapshots first if this is intentional.');
+        console.warn(
+          `⚠️ [CONTROLLER] WARNING: ${existingSnapshotsCount} existing snapshot(s) found!`,
+        );
+        console.warn(
+          '⚠️ [CONTROLLER] API calculation will proceed but may overwrite frozen allocations.',
+        );
+        console.warn(
+          'ℹ️ [CONTROLLER] Consider clearing snapshots first if this is intentional.',
+        );
       }
 
       const result =

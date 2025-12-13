@@ -10,13 +10,27 @@ import { AuthService } from './services';
 import { UserService } from '../user/services';
 
 // Models
-import { Brand, User, UserBrandVotes, UserDailyActions, AirdropSnapshot, AirdropScore } from '../../models';
+import {
+  Brand,
+  User,
+  UserBrandVotes,
+  UserDailyActions,
+  AirdropSnapshot,
+  AirdropScore,
+} from '../../models';
 import { AdminGuard } from 'src/security/guards';
 import { AirdropModule } from '../airdrop/airdrop.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Brand, UserBrandVotes, UserDailyActions, AirdropSnapshot, AirdropScore]),
+    TypeOrmModule.forFeature([
+      User,
+      Brand,
+      UserBrandVotes,
+      UserDailyActions,
+      AirdropSnapshot,
+      AirdropScore,
+    ]),
     forwardRef(() => AirdropModule),
   ],
   controllers: [AuthController],
