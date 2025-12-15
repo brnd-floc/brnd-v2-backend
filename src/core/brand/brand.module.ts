@@ -1,7 +1,6 @@
 // Dependencies
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 
 // Controllers
 import { BrandController } from './brand.controller';
@@ -31,7 +30,6 @@ import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([
       User,
       Brand,

@@ -31,6 +31,7 @@ import { AuthorizationGuard, QuickAuthPayload } from '../../security/guards';
 import { Session } from '../../security/decorators';
 import { getConfig } from '../../security/config';
 import NeynarService from 'src/utils/neynar';
+import { BrandSchedulerService } from './services/brand-scheduler.service';
 
 export type BrandTimePeriod = 'day' | 'week' | 'month' | 'all';
 
@@ -42,6 +43,7 @@ export class BrandController {
     private readonly brandSeederService: BrandSeederService,
     private readonly userService: UserService,
     private readonly rewardService: RewardService,
+    private readonly brandSchedulerService: BrandSchedulerService,
   ) {}
 
   /**
@@ -1267,6 +1269,69 @@ export class BrandController {
         HttpStatus.INTERNAL_SERVER_ERROR,
         'clearAllBrands',
         `Failed to clear brands: ${error.message}`,
+      );
+    }
+  }
+
+  // ============================================================================
+  // DEBUG ENDPOINTS FOR TESTING CRON JOBS
+  // ============================================================================
+
+  /**
+   * Manual trigger for testing cron jobs (ADMIN ONLY).
+   * Useful for debugging cron job functionality without waiting for scheduled times.
+   */
+  @Post('/dev/test-cron')
+  @UseGuards(AuthorizationGuard)
+  async testCronJobs(
+    @Session() user: QuickAuthPayload,
+    @Query('type') type: 'daily' | 'reminder' | 'health' = 'daily',
+    @Res() res: Response,
+  ): Promise<Response> {
+    const adminFids = [16098, 5431];
+    if (!adminFids.includes(user.sub)) {
+      return hasError(
+        res,
+        HttpStatus.FORBIDDEN,
+        'testCronJobs',
+        'Admin access required',
+      );
+    }
+
+    try {
+      console.log(`🧪 [TEST] Manual cron job test triggered: ${type}`);
+
+      switch (type) {
+        case 'daily':
+          await this.brandSchedulerService.handlePeriodEnd();
+          break;
+        case 'reminder':
+          await this.brandSchedulerService.sendDailyVoteReminder();
+          break;
+        case 'health':
+          await this.brandSchedulerService.healthCheck();
+          break;
+        default:
+          return hasError(
+            res,
+            HttpStatus.BAD_REQUEST,
+            'testCronJobs',
+            'Invalid type. Use: daily, reminder, or health',
+          );
+      }
+
+      return hasResponse(res, {
+        message: `${type} cron job executed successfully`,
+        executedAt: new Date().toISOString(),
+        type,
+      });
+    } catch (error) {
+      console.error(`❌ [TEST] Cron job test failed:`, error);
+      return hasError(
+        res,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'testCronJobs',
+        `Failed to execute ${type} cron job: ${error.message}`,
       );
     }
   }

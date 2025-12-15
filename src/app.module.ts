@@ -2,6 +2,7 @@
 // Dependencies
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 // Core
 import CoreModules from './core';
 // Security
@@ -23,6 +24,7 @@ import {
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ...CoreModules,
     TypeOrmModule.forRoot({
       type: 'mysql',

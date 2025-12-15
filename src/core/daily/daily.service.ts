@@ -30,6 +30,10 @@ export class DailyService {
     timeZone: 'UTC',
   })
   async handleDailyReset(): Promise<void> {
+    console.log(
+      '🌅 [CRON] Daily reset cron job triggered at:',
+      new Date().toISOString(),
+    );
     logger.log('🌅 [DAILY] Starting daily reset at 00:00 UTC');
 
     try {

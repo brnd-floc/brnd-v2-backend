@@ -8,7 +8,11 @@ import {
   Body,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { AuthorizationGuard, QuickAuthPayload } from '../../security/guards';
+import {
+  AdminGuard,
+  AuthorizationGuard,
+  QuickAuthPayload,
+} from '../../security/guards';
 import { Session } from '../../security/decorators';
 import { hasResponse, hasError, HttpStatus } from '../../utils/http';
 import { AirdropService } from './services/airdrop.service';
@@ -100,6 +104,7 @@ export class AirdropController {
   }
 
   @Get('database-summary')
+  @UseGuards(AuthorizationGuard)
   async getDatabaseSummary(@Res() res: Response) {
     try {
       console.log(`📊 [CONTROLLER] Getting database summary...`);
@@ -124,6 +129,7 @@ export class AirdropController {
   }
 
   @Get('fix-zero-allocations')
+  @UseGuards(AuthorizationGuard)
   async fixZeroAllocations(@Res() res: Response) {
     try {
       console.log(`🔧 [CONTROLLER] Fixing zero score allocations...`);
@@ -148,6 +154,7 @@ export class AirdropController {
   }
 
   @Get('recalculate-tokens')
+  @UseGuards(AuthorizationGuard)
   async recalculateTokens(@Res() res: Response) {
     try {
       console.log(`🔄 [CONTROLLER] Starting token recalculation...`);
@@ -374,6 +381,7 @@ export class AirdropController {
   }
 
   @Get('calculate-all-users')
+  @UseGuards(AdminGuard)
   async calculateAllUsers(
     @Res() res: Response,
     @Query('batchSize') batchSize?: string,

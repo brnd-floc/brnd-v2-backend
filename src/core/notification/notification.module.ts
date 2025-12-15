@@ -2,17 +2,13 @@
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 
 import { NotificationController } from './notification.controller';
 import { FarcasterNotificationService } from './services';
 import { User, UserBrandVotes } from '../../models';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, UserBrandVotes]),
-    ScheduleModule.forRoot(),
-  ],
+  imports: [TypeOrmModule.forFeature([User, UserBrandVotes])],
   controllers: [NotificationController],
   providers: [FarcasterNotificationService],
   exports: [FarcasterNotificationService],

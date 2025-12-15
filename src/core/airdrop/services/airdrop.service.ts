@@ -2721,7 +2721,7 @@ export class AirdropService {
     const users = await this.userRepository.find({
       select: ['fid', 'username', 'points', 'id'],
       where: {
-        fid: Not(In([5431, 6099, 8109, 222144, 16098])),
+        fid: Not(In([5431, 6099, 8109, 222144])),
       },
       order: { points: 'DESC' },
       take: this.TOP_USERS, // 1111

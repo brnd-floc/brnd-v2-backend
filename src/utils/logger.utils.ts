@@ -50,7 +50,12 @@ export const errorLog = (logger: any, message: string, ...args: any[]) => {
 export const cleanMessage = (message: string): string => {
   if (isProduction) {
     // Remove emojis and reduce verbosity for production
-    return message.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+    return message
+      .replace(
+        /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu,
+        '',
+      )
+      .trim();
   }
   return message;
 };
@@ -66,9 +71,9 @@ export const criticalLog = (logger: any, message: string, ...args: any[]) => {
  * Conditional logging based on log level
  */
 export const conditionalLog = (
-  logger: any, 
+  logger: any,
   level: 'debug' | 'verbose' | 'log' | 'warn' | 'error',
-  message: string, 
+  message: string,
   ...args: any[]
 ) => {
   switch (level) {

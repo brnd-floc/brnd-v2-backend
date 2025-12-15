@@ -4,7 +4,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, IsNull } from 'typeorm';
 import { User, UserBrandVotes } from '../../../models';
 import { Brand } from '../../../models';
-import { devLog, debugLog, warnLog, errorLog, criticalLog } from '../../../utils/logger.utils';
+import {
+  devLog,
+  debugLog,
+  warnLog,
+  errorLog,
+  criticalLog,
+} from '../../../utils/logger.utils';
 
 @Injectable()
 export class FarcasterNotificationService {
@@ -98,7 +104,10 @@ export class FarcasterNotificationService {
     // Validate content against Farcaster limits
     this.validateNotificationContent(title, body, notificationId);
 
-    criticalLog(this.logger, `Sending notification: ${title} (ID: ${notificationId})`);
+    criticalLog(
+      this.logger,
+      `Sending notification: ${title} (ID: ${notificationId})`,
+    );
 
     // Get all users with notification tokens
     const users = await this.userRepository.find({
