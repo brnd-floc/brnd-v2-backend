@@ -122,6 +122,12 @@ export class AirdropScore {
   })
   percentage: number;
 
+  @Column({
+    type: 'json',
+    nullable: true,
+  })
+  challenges: any; // Stores ChallengeBreakdown[] as JSON
+
   @CreateDateColumn()
   createdAt: Date;
 

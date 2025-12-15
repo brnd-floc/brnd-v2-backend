@@ -227,9 +227,9 @@ export class BrandController {
         'scoreWeek',
         'stateScoreWeek',
         'rankingWeek',
-        'scoreMonth', // NEW
-        'stateScoreMonth', // NEW
-        'rankingMonth', // NEW
+        'scoreMonth',
+        'stateScoreMonth',
+        'rankingMonth',
         'banned',
         'scoreDay',
       ],
@@ -240,7 +240,6 @@ export class BrandController {
       pageId,
       limit,
     );
-    console.log('BRANDS', brands);
 
     return hasResponse(res, {
       pageId,

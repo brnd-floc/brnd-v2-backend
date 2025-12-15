@@ -162,10 +162,6 @@ export class AuthController {
         updatedAt: userData.user.updatedAt,
         isNewUser,
       };
-      console.log(
-        'FINISHING THE CALL TO THE ME ENDPOINT AND SENDING BACK THIS RESPONSE DATA: ',
-        JSON.stringify(responseData, null, 2),
-      );
 
       return hasResponse(res, responseData);
     } catch (error) {

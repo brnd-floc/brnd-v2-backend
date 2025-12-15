@@ -79,19 +79,10 @@ export class AirdropService {
   ) {}
 
   async checkUserEligibility(fid: number): Promise<AirdropCalculation> {
-    console.log(`🎯 [AIRDROP] Starting eligibility check for FID: ${fid}`);
-
     const user = await this.userRepository.findOne({ where: { fid } });
     if (!user) {
-      console.log(`❌ [AIRDROP] User not found for FID: ${fid}`);
       throw new Error('User not found');
     }
-
-    console.log(`👤 [AIRDROP] Found user:`, {
-      fid: user.fid,
-      username: user.username,
-      systemPoints: user.points,
-    });
 
     // Check if user already has an airdrop score
     const existingAirdropScore = await this.airdropScoreRepository.findOne({
@@ -99,41 +90,19 @@ export class AirdropService {
       relations: ['user'],
     });
 
-    if (existingAirdropScore) {
-      console.log(`📊 [AIRDROP] Found existing airdrop score:`, {
-        previousAirdropScore: Number(existingAirdropScore.finalScore),
-        lastUpdated: existingAirdropScore.updatedAt,
-      });
-    } else {
-      console.log(
-        `🆕 [AIRDROP] No existing airdrop score found, will create new one`,
-      );
-    }
-
     // STEP 1: Get base points (user's accumulated system points)
     const userSystemPoints = user.points;
-    console.log(
-      `📈 [AIRDROP] STEP 1 - Base Points (User's System Points): ${userSystemPoints}`,
-    );
 
     // STEP 2: Calculate all multipliers
-    console.log(`🔢 [AIRDROP] STEP 2 - Calculating multipliers...`);
     const multiplierData = await this.calculateMultipliersWithBreakdown(fid);
 
     // STEP 3: Calculate total multiplier
     const totalMultiplier = this.calculateTotalMultiplier(
       multiplierData.multipliers,
     );
-    console.log(`✖️ [AIRDROP] STEP 3 - Total Multiplier: ${totalMultiplier}`, {
-      breakdown: multiplierData.multipliers,
-    });
 
     // STEP 4: Calculate final airdrop score
     const airdropScore = Math.round(userSystemPoints * totalMultiplier);
-    console.log(`🏆 [AIRDROP] STEP 4 - Final Airdrop Score Calculation:`);
-    console.log(
-      `   ${userSystemPoints} (base points) × ${totalMultiplier} (total multiplier) = ${airdropScore}`,
-    );
 
     // Get the actual tokenAllocation and percentage from the saved airdrop score
     let percentage = 0;
@@ -142,18 +111,13 @@ export class AirdropService {
     if (existingAirdropScore) {
       percentage = Number(existingAirdropScore.percentage) || 0;
       tokenAllocation = Number(existingAirdropScore.tokenAllocation) || 0;
-      console.log(
-        `📊 [AIRDROP] Using existing token allocation: ${tokenAllocation.toLocaleString()}, percentage: ${percentage.toFixed(6)}%`,
-      );
     }
 
     // STEP 5: Calculate leaderboard position based on new airdrop score
-    console.log(`🏅 [AIRDROP] STEP 5 - Calculating leaderboard position...`);
     const leaderboardPosition = await this.getUserLeaderboardPosition(
       fid,
       airdropScore,
     );
-    console.log(`📍 [AIRDROP] Leaderboard position: #${leaderboardPosition}`);
 
     const calculation: AirdropCalculation = {
       fid,
@@ -173,17 +137,7 @@ export class AirdropService {
         : undefined,
     };
 
-    console.log(`💾 [AIRDROP] STEP 6 - Saving airdrop score to database...`);
     await this.saveAirdropScore(calculation);
-
-    console.log(`✅ [AIRDROP] Final calculation summary:`, {
-      fid,
-      userSystemPoints,
-      totalMultiplier,
-      newAirdropScore: airdropScore,
-      leaderboardPosition,
-      tokenAllocation,
-    });
 
     return calculation;
   }
@@ -265,7 +219,6 @@ export class AirdropService {
 
   private async getNeynarUserInfo(fid: number): Promise<any> {
     try {
-      console.log(`🔍 [NEYNAR] Fetching user info for FID: ${fid}`);
       const apiKey = getConfig().neynar.apiKey.replace(/&$/, '');
 
       const response = await fetch(
@@ -285,7 +238,6 @@ export class AirdropService {
       }
 
       const data = await response.json();
-      console.log(`✅ [NEYNAR] User info retrieved:`, data?.users?.[0]);
       return data?.users?.[0] || null;
     } catch (error) {
       console.error('Error fetching user info:', error);
@@ -302,9 +254,6 @@ export class AirdropService {
     };
   }> {
     try {
-      console.log(
-        `🔍 [FOLLOW ACCOUNTS] Checking follow status for FID: ${fid}`,
-      );
       const apiKey = getConfig().neynar.apiKey.replace(/&$/, '');
       const BRND_FID = 1108951;
       const FLOC_FID = 6946;
@@ -327,7 +276,6 @@ export class AirdropService {
       }
 
       const data = await response.json();
-      console.log(`✅ [FOLLOW ACCOUNTS] Follow data retrieved:`, data);
 
       const users = data?.users || [];
       const brndUser = users.find((u) => u.fid === BRND_FID);
@@ -345,23 +293,10 @@ export class AirdropService {
         Boolean,
       ).length;
 
-      console.log(`📱 [FOLLOW ACCOUNTS] Follow status:`, details);
-
       let multiplier = 1.0;
       if (followedCount >= 2)
         multiplier = 1.4; // Follow both @brnd and @floc
       else if (followedCount >= 1) multiplier = 1.2; // Follow at least one account
-
-      console.log(`📱 [FOLLOW ACCOUNTS] Multiplier calculation:`, {
-        followedCount,
-        multiplier,
-        logic:
-          followedCount >= 2
-            ? 'Both accounts (1.4x)'
-            : followedCount >= 1
-              ? 'One account (1.2x)'
-              : 'No accounts (1.0x)',
-      });
 
       return { multiplier, followedCount, details };
     } catch (error) {
@@ -379,7 +314,6 @@ export class AirdropService {
 
   private async checkChannelFollow(fid: number): Promise<boolean> {
     try {
-      console.log(`🔍 [NEYNAR] Checking follow status for FID: ${fid}`);
       const apiKey = getConfig().neynar.apiKey.replace(/&$/, '');
 
       const response = await fetch(
@@ -399,15 +333,10 @@ export class AirdropService {
       }
 
       const data = await response.json();
-      console.log(`✅ [NEYNAR] Follow data retrieved:`, data);
 
       const channel = data?.channels[0] || [];
       const isFollowingBrndChannel =
         channel?.viewer_context?.following || false;
-
-      console.log(`📱 [FOLLOW CHANNEL] Follow status:`, {
-        isFollowingBrndChannel,
-      });
 
       return isFollowingBrndChannel;
     } catch (error) {
@@ -418,7 +347,6 @@ export class AirdropService {
 
   private async checkPodiumCasts(fid: number): Promise<number> {
     try {
-      console.log(`🔍 [NEYNAR] Checking podium casts for FID: ${fid}`);
       const apiKey = getConfig().neynar.apiKey.replace(/&$/, '');
 
       const responseCasts = await fetch(
@@ -438,7 +366,6 @@ export class AirdropService {
       }
 
       const dataCasts = await responseCasts.json();
-      console.log(`✅ [NEYNAR] Casts data retrieved:`);
 
       const casts = dataCasts?.casts || [];
       const podiumCasts = casts.filter(
@@ -451,8 +378,6 @@ export class AirdropService {
           ),
       );
       const podiumCastsCount = podiumCasts.length;
-
-      console.log(`✅ [NEYNAR] Podium casts count:`, podiumCastsCount);
 
       return podiumCastsCount;
     } catch (error) {
@@ -481,18 +406,6 @@ export class AirdropService {
         multiplier = 1.2; // Follow channel only
       }
 
-      console.log(`📱 [CHANNEL INTERACTION] Multiplier calculation:`, {
-        isFollowingChannel,
-        podiumCastsCount,
-        multiplier,
-        logic:
-          podiumCastsCount >= 1 && isFollowingChannel
-            ? 'Follow + Publish podium (1.4x)'
-            : isFollowingChannel
-              ? 'Follow channel only (1.2x)'
-              : 'No interaction (1.0x)',
-      });
-
       return { multiplier, isFollowingChannel, podiumCastsCount };
     } catch (error) {
       console.error('Error calculating channel interaction multiplier:', error);
@@ -511,14 +424,9 @@ export class AirdropService {
     stakedBalance: number;
   }> {
     try {
-      console.log(`💰 [BRND HOLDINGS] Checking token holdings for FID: ${fid}`);
-
       // Get user's verified addresses from Neynar
       const userInfo = await this.getNeynarUserInfo(fid);
       if (!userInfo?.verified_addresses?.eth_addresses) {
-        console.log(
-          `❌ [BRND HOLDINGS] No verified ETH addresses found for FID: ${fid}`,
-        );
         return {
           multiplier: 1.0,
           totalBalance: 0,
@@ -528,10 +436,6 @@ export class AirdropService {
       }
 
       const ethAddresses = userInfo.verified_addresses.eth_addresses;
-      console.log(
-        `🔍 [BRND HOLDINGS] Found ${ethAddresses.length} verified ETH addresses:`,
-        ethAddresses,
-      );
 
       // Check BRND wallet balance and staked balance for each address in parallel
       const balancePromises = ethAddresses.map(async (address) => {
@@ -555,38 +459,18 @@ export class AirdropService {
       );
       const totalBalance = totalWalletBalance + totalStakedBalance;
 
-      console.log(`💰 [BRND HOLDINGS] Balance breakdown:`, {
-        walletBalance: totalWalletBalance.toLocaleString(),
-        stakedBalance: totalStakedBalance.toLocaleString(),
-        totalBalance: totalBalance.toLocaleString(),
-      });
-
       // Apply multiplier based on total holdings (wallet + staked) according to spec
       let multiplier = 1.0;
-      let tier = 'No holdings';
 
       if (totalBalance >= 800_000_000) {
         multiplier = 1.8;
-        tier = '800M+ BRND (1.8x)';
       } else if (totalBalance >= 400_000_000) {
         multiplier = 1.6;
-        tier = '400M+ BRND (1.6x)';
       } else if (totalBalance >= 200_000_000) {
         multiplier = 1.4;
-        tier = '200M+ BRND (1.4x)';
       } else if (totalBalance >= 100_000_000) {
         multiplier = 1.2;
-        tier = '100M+ BRND (1.2x)';
       }
-
-      console.log(`💰 [BRND HOLDINGS] Multiplier calculation:`, {
-        totalBalance: totalBalance.toLocaleString(),
-        walletBalance: totalWalletBalance.toLocaleString(),
-        stakedBalance: totalStakedBalance.toLocaleString(),
-        multiplier,
-        tier,
-        logic: `Holding ${totalBalance.toLocaleString()} BRND tokens (${totalWalletBalance.toLocaleString()} wallet + ${totalStakedBalance.toLocaleString()} staked)`,
-      });
 
       return {
         multiplier,
@@ -607,10 +491,6 @@ export class AirdropService {
 
   private async getBrndBalance(address: string): Promise<number> {
     try {
-      console.log(
-        `🔍 [BLOCKCHAIN] Checking BRND balance for address: ${address}`,
-      );
-
       const BRND_CONTRACT = '0x41Ed0311640A5e489A90940b1c33433501a21B07';
       const appConfig = getConfig();
       const BASE_RPC_URL = appConfig.blockchain.baseRpcUrl;
@@ -654,9 +534,6 @@ export class AirdropService {
       const balanceWei = BigInt(balanceHex);
       const balance = Number(balanceWei) / Math.pow(10, 18);
 
-      console.log(
-        `💰 [BLOCKCHAIN] Address ${address} BRND balance: ${balance.toLocaleString()}`,
-      );
       return balance;
     } catch (error) {
       console.error(`Error getting BRND balance for ${address}:`, error);
@@ -666,10 +543,6 @@ export class AirdropService {
 
   private async getStakedBrndBalance(address: string): Promise<number> {
     try {
-      console.log(
-        `🥩 [STAKING] Checking staked BRND balance for address: ${address}`,
-      );
-
       const TELLER_VAULT = '0x19d1872d8328b23a219e11d3d6eeee1954a88f88';
       const appConfig = getConfig();
       const BASE_RPC_URL = appConfig.blockchain.baseRpcUrl;
@@ -715,7 +588,6 @@ export class AirdropService {
 
       // If no shares, return 0
       if (sharesBigInt === 0n) {
-        console.log(`🥩 [STAKING] Address ${address} has no vault shares`);
         return 0;
       }
 
@@ -760,9 +632,6 @@ export class AirdropService {
       const assetsBigInt = BigInt(assetsHex);
       const stakedBalance = Number(assetsBigInt) / Math.pow(10, 18);
 
-      console.log(
-        `🥩 [STAKING] Address ${address} staked BRND balance: ${stakedBalance.toLocaleString()}`,
-      );
       return stakedBalance;
     } catch (error) {
       console.error(`Error getting staked BRND balance for ${address}:`, error);
@@ -775,30 +644,17 @@ export class AirdropService {
     collectiblesCount: number;
   }> {
     try {
-      console.log(`🎨 [COLLECTIBLES] Checking collectibles for FID: ${fid}`);
-
       const collectiblesCount = await this.getCollectiblesCount(fid);
 
       let multiplier = 1.0;
-      let tier = 'No collectibles';
 
       if (collectiblesCount >= 3) {
         multiplier = 1.8;
-        tier = '3+ collectibles (1.8x)';
       } else if (collectiblesCount >= 2) {
         multiplier = 1.4;
-        tier = '2 collectibles (1.4x)';
       } else if (collectiblesCount >= 1) {
         multiplier = 1.2;
-        tier = '1 collectible (1.2x)';
       }
-
-      console.log(`🎨 [COLLECTIBLES] Multiplier calculation:`, {
-        collectiblesCount,
-        multiplier,
-        tier,
-        logic: `Collected ${collectiblesCount} BRND cast collectibles from FIDs 1341847 and 1108951`,
-      });
 
       return { multiplier, collectiblesCount };
     } catch (error) {
@@ -812,36 +668,19 @@ export class AirdropService {
     votedBrandsCount: number;
   }> {
     try {
-      console.log(`🗳️ [VOTED BRANDS] Checking voted brands for FID: ${fid}`);
-
       const votedBrandsCount = await this.getVotedBrandsCount(fid);
-      console.log(
-        `📊 [VOTED BRANDS] User has voted for ${votedBrandsCount} unique brands`,
-      );
 
       let multiplier = 1.0;
-      let tier = 'No votes';
 
       if (votedBrandsCount >= 72) {
         multiplier = 1.8;
-        tier = '72+ brands (1.8x)';
       } else if (votedBrandsCount >= 36) {
         multiplier = 1.6;
-        tier = '36+ brands (1.6x)';
       } else if (votedBrandsCount >= 18) {
         multiplier = 1.4;
-        tier = '18+ brands (1.4x)';
       } else if (votedBrandsCount >= 9) {
         multiplier = 1.2;
-        tier = '9+ brands (1.2x)';
       }
-
-      console.log(`🗳️ [VOTED BRANDS] Multiplier calculation:`, {
-        votedBrandsCount,
-        multiplier,
-        tier,
-        logic: `Voted for ${votedBrandsCount} unique brands`,
-      });
 
       return { multiplier, votedBrandsCount };
     } catch (error) {
@@ -855,39 +694,20 @@ export class AirdropService {
     sharedPodiumsCount: number;
   }> {
     try {
-      console.log(
-        `📤 [SHARED PODIUMS] Checking shared podiums for FID: ${fid}`,
-      );
-
       // Query for shared podiums from UserBrandVotes
       const sharedPodiumsCount = await this.getSharedPodiumsCount(fid);
-      console.log(
-        `📤 [SHARED PODIUMS] Found ${sharedPodiumsCount} shared podiums`,
-      );
 
       let multiplier = 1.0;
-      let tier = 'No shared podiums';
 
       if (sharedPodiumsCount >= 80) {
         multiplier = 1.8;
-        tier = '80+ podiums (1.8x)';
       } else if (sharedPodiumsCount >= 40) {
         multiplier = 1.6;
-        tier = '40+ podiums (1.6x)';
       } else if (sharedPodiumsCount >= 20) {
         multiplier = 1.4;
-        tier = '20+ podiums (1.4x)';
       } else if (sharedPodiumsCount >= 10) {
         multiplier = 1.2;
-        tier = '10+ podiums (1.2x)';
       }
-
-      console.log(`📤 [SHARED PODIUMS] Multiplier calculation:`, {
-        sharedPodiumsCount,
-        multiplier,
-        tier,
-        logic: `Shared ${sharedPodiumsCount} podiums with castHash`,
-      });
 
       return { multiplier, sharedPodiumsCount };
     } catch (error) {
@@ -902,37 +722,19 @@ export class AirdropService {
     hasPowerBadge: boolean;
   }> {
     try {
-      console.log(`⭐ [NEYNAR SCORE] Checking Neynar score for FID: ${fid}`);
-
       const userInfo = await this.getNeynarUserInfo(fid);
       const hasPowerBadge = userInfo?.power_badge || false;
       const neynarScore = hasPowerBadge ? 1.0 : 0.8;
 
-      console.log(
-        `🎖️ [NEYNAR SCORE] User power badge: ${hasPowerBadge}, score: ${neynarScore}`,
-      );
-
       let multiplier = 1.0;
-      let tier = 'Low score';
 
       if (neynarScore >= 1.0) {
         multiplier = 1.8;
-        tier = '1.0+ score (1.8x)';
       } else if (neynarScore >= 0.9) {
         multiplier = 1.5;
-        tier = '0.9+ score (1.5x)';
       } else if (neynarScore >= 0.85) {
         multiplier = 1.2;
-        tier = '0.85+ score (1.2x)';
       }
-
-      console.log(`⭐ [NEYNAR SCORE] Multiplier calculation:`, {
-        neynarScore,
-        hasPowerBadge,
-        multiplier,
-        tier,
-        logic: `Neynar score: ${neynarScore} (Power badge: ${hasPowerBadge})`,
-      });
 
       return { multiplier, neynarScore, hasPowerBadge };
     } catch (error) {
@@ -947,13 +749,10 @@ export class AirdropService {
     hasBrndTokenInProfile: boolean;
   }> {
     try {
-      console.log(`👑 [PRO USER] Checking Pro User status for FID: ${fid}`);
-
       // Get user info from Neynar to check Pro status and profile
       const userInfo = await this.getNeynarUserInfo(fid);
 
       if (!userInfo) {
-        console.log(`👑 [PRO USER] No user info found for FID: ${fid}`);
         return {
           multiplier: 1.0,
           isProUser: false,
@@ -968,39 +767,15 @@ export class AirdropService {
         new Date(userInfo.pro.expires_at) > new Date();
 
       // Check if user has BRND token in their profile bio
-      const profileBio = userInfo.profile?.bio?.text || '';
       const hasBrndTokenInProfile = false;
 
-      console.log(`👑 [PRO USER] User Pro status:`, {
-        pro: userInfo.pro,
-        isProUser,
-        profileBio,
-        hasBrndTokenInProfile,
-      });
-
       let multiplier = 1.0;
-      let tier = 'Not Pro User';
 
       if (isProUser && hasBrndTokenInProfile) {
         multiplier = 1.4;
-        tier = 'Pro + BRND in profile (1.4x)';
       } else if (isProUser) {
         multiplier = 1.2;
-        tier = 'Pro User only (1.2x)';
       }
-
-      console.log(`👑 [PRO USER] Multiplier calculation:`, {
-        isProUser,
-        hasBrndTokenInProfile,
-        multiplier,
-        tier,
-        logic:
-          isProUser && hasBrndTokenInProfile
-            ? 'Pro User with BRND in profile'
-            : isProUser
-              ? 'Pro User without BRND in profile'
-              : 'Not Pro User',
-      });
 
       return { multiplier, isProUser, hasBrndTokenInProfile };
     } catch (error) {
@@ -1017,10 +792,6 @@ export class AirdropService {
     multipliers: AirdropMultipliers;
     challenges: ChallengeBreakdown[];
   }> {
-    console.log(
-      `🧮 [MULTIPLIERS] Starting parallel multiplier calculation for FID: ${fid}`,
-    );
-
     // Execute all multiplier calculations in parallel
     const [
       followAccountsResult,
@@ -1041,8 +812,6 @@ export class AirdropService {
       this.calculateNeynarScoreMultiplier(fid),
       this.calculateProUserMultiplier(fid),
     ]);
-
-    console.log(`✅ [MULTIPLIERS] All parallel calculations completed`);
 
     // Build challenges array
     const challenges: ChallengeBreakdown[] = [
@@ -1413,34 +1182,22 @@ export class AirdropService {
       proUser: proUserResult.multiplier,
     };
 
-    console.log(`📋 [MULTIPLIERS] Final multipliers summary:`, multipliers);
-    console.log(`🧮 [MULTIPLIERS] Parallel multiplier calculation complete!`);
-
     return { multipliers, challenges };
   }
 
   private async getCollectiblesCount(fid: number): Promise<number> {
     try {
-      console.log(
-        `🎨 [COLLECTIBLES] Getting collectibles count for FID: ${fid}`,
-      );
-
       const config = getConfig();
       const indexerUrl = config.collectiblesIndexer?.apiRoute;
       const apiKey = config.collectiblesIndexer?.apiKey;
 
       if (!indexerUrl || !apiKey) {
-        console.warn(
-          `⚠️  [COLLECTIBLES] Missing indexer configuration. Returning 0 collectibles.`,
-        );
         return 0;
       }
 
       // Query collectibles from specific creator FIDs: 1341847 and 1108951
       const collectedFids = '1341847,1108951';
       const url = `${indexerUrl}/brnd-airdrop/collected-casts?collectorFid=${fid}&collectedFids=${collectedFids}`;
-
-      console.log(`🔍 [COLLECTIBLES] Fetching from: ${url}`);
 
       const response = await fetch(url, {
         method: 'GET',
@@ -1451,37 +1208,21 @@ export class AirdropService {
       });
 
       if (!response.ok) {
-        console.error(
-          `❌ [COLLECTIBLES] API error: ${response.status} ${response.statusText}`,
-        );
         return 0;
       }
 
       const data = await response.json();
       const collectiblesCount = data?.count || 0;
 
-      console.log(
-        `✅ [COLLECTIBLES] Found ${collectiblesCount} collectibles for FID: ${fid}`,
-        {
-          collectedCasts: data?.collectedCasts?.length || 0,
-          creatorFids: collectedFids,
-        },
-      );
-
       return collectiblesCount;
     } catch (error) {
-      console.error(
-        '❌ [COLLECTIBLES] Error fetching collectibles count:',
-        error,
-      );
+      console.error('Error fetching collectibles count:', error);
       return 0;
     }
   }
 
   private async getVotedBrandsCount(fid: number): Promise<number> {
     try {
-      console.log(`📊 [VOTES] Getting voted brands count for FID: ${fid}`);
-
       const user = await this.userRepository.findOne({
         where: { fid },
         relations: [
@@ -1493,13 +1234,8 @@ export class AirdropService {
       });
 
       if (!user || !user.userBrandVotes) {
-        console.log(`📊 [VOTES] No votes found for user ${fid}`);
         return 0;
       }
-
-      console.log(
-        `📊 [VOTES] Found ${user.userBrandVotes.length} vote records for user ${fid}`,
-      );
 
       // Collect all unique brand IDs from all three brand positions in each vote
       const uniqueBrands = new Set<number>();
@@ -1510,11 +1246,6 @@ export class AirdropService {
         if (vote.brand3?.id) uniqueBrands.add(vote.brand3.id);
       });
 
-      console.log(
-        `📊 [VOTES] User has voted for ${uniqueBrands.size} unique brands`,
-      );
-      console.log(`📊 [VOTES] Unique brand IDs:`, Array.from(uniqueBrands));
-
       return uniqueBrands.size;
     } catch (error) {
       console.error('Error getting voted brands count:', error);
@@ -1524,17 +1255,12 @@ export class AirdropService {
 
   private async getSharedPodiumsCount(fid: number): Promise<number> {
     try {
-      console.log(
-        `📤 [SHARED PODIUMS] Getting shared podiums count for FID: ${fid}`,
-      );
-
       const user = await this.userRepository.findOne({
         where: { fid },
         relations: ['userBrandVotes'],
       });
 
       if (!user || !user.userBrandVotes) {
-        console.log(`📤 [SHARED PODIUMS] No votes found for user ${fid}`);
         return 0;
       }
 
@@ -1544,18 +1270,6 @@ export class AirdropService {
           vote.shared === true &&
           vote.castHash !== null &&
           vote.castHash !== undefined,
-      );
-
-      console.log(
-        `📤 [SHARED PODIUMS] Found ${sharedPodiums.length} shared podiums for user ${fid}`,
-      );
-      console.log(
-        `📤 [SHARED PODIUMS] Shared podium details:`,
-        sharedPodiums.map((vote) => ({
-          transactionHash: vote.transactionHash,
-          castHash: vote.castHash,
-          date: vote.date,
-        })),
       );
 
       return sharedPodiums.length;
@@ -1611,6 +1325,7 @@ export class AirdropService {
       airdropScore.finalScore = calculation.finalScore;
       airdropScore.tokenAllocation = calculation.tokenAllocation;
       airdropScore.percentage = calculation.percentage;
+      airdropScore.challenges = calculation.challenges || null;
 
       await this.airdropScoreRepository.save(airdropScore);
     } catch (error) {
@@ -1650,18 +1365,14 @@ export class AirdropService {
       sharedPodiumsCount: number;
     }>;
   }> {
-    console.log(`📊 [DATABASE SUMMARY] Generating database summary...`);
-
     // Get total users
     const totalUsers = await this.userRepository.count();
-    console.log(`👥 [DATABASE SUMMARY] Total users: ${totalUsers}`);
 
     // Get users with votes
     const usersWithVotes = await this.userRepository
       .createQueryBuilder('user')
       .innerJoin('user.userBrandVotes', 'votes')
       .getCount();
-    console.log(`🗳️ [DATABASE SUMMARY] Users with votes: ${usersWithVotes}`);
 
     // Get users with shared podiums
     const usersWithSharedPodiums = await this.userRepository
@@ -1670,16 +1381,12 @@ export class AirdropService {
       .where('votes.shared = :shared', { shared: true })
       .andWhere('votes.castHash IS NOT NULL')
       .getCount();
-    console.log(
-      `📤 [DATABASE SUMMARY] Users with shared podiums: ${usersWithSharedPodiums}`,
-    );
 
     // Get total votes count
     const totalVotesResult = await this.userRepository.query(`
       SELECT COUNT(*) as total FROM user_brand_votes
     `);
     const totalVotes = parseInt(totalVotesResult[0]?.total || '0');
-    console.log(`📊 [DATABASE SUMMARY] Total votes: ${totalVotes}`);
 
     // Get total shared podiums count
     const totalSharedPodiumsResult = await this.userRepository.query(`
@@ -1688,9 +1395,6 @@ export class AirdropService {
     `);
     const totalSharedPodiums = parseInt(
       totalSharedPodiumsResult[0]?.total || '0',
-    );
-    console.log(
-      `📤 [DATABASE SUMMARY] Total shared podiums: ${totalSharedPodiums}`,
     );
 
     // Calculate averages
@@ -1719,9 +1423,6 @@ export class AirdropService {
 
     // Get existing airdrop scores count
     const existingAirdropScores = await this.airdropScoreRepository.count();
-    console.log(
-      `🏆 [DATABASE SUMMARY] Existing airdrop scores: ${existingAirdropScores}`,
-    );
 
     // Get top users by points
     const topUsersByPoints = await this.userRepository.find({
@@ -1784,13 +1485,10 @@ export class AirdropService {
       topUsersBySharedPodiums,
     };
 
-    console.log(`📋 [DATABASE SUMMARY] Summary generated:`, summary);
     return summary;
   }
 
   async fixZeroScoreAllocations(): Promise<{ updatedUsers: number }> {
-    console.log(`🔧 [ZERO FIX] Fixing users with 0 airdrop score...`);
-
     const result = await this.airdropScoreRepository
       .createQueryBuilder()
       .update()
@@ -1800,10 +1498,6 @@ export class AirdropService {
       })
       .where('finalScore = 0 OR finalScore IS NULL')
       .execute();
-
-    console.log(
-      `✅ [ZERO FIX] Fixed ${result.affected} users with zero scores`,
-    );
 
     return { updatedUsers: result.affected || 0 };
   }
@@ -1822,10 +1516,6 @@ export class AirdropService {
       over30USD: number;
     };
   }> {
-    console.log(
-      `🔄 [TOKEN RECALC] Starting token distribution recalculation...`,
-    );
-
     // STEP 1: Fix zero score allocations first
     await this.fixZeroScoreAllocations();
 
@@ -1836,33 +1526,12 @@ export class AirdropService {
       .where('score.finalScore > 0')
       .getMany();
 
-    console.log(
-      `📊 [TOKEN RECALC] Found ${airdropScores.length} users with airdrop scores > 0`,
-    );
-
-    // Debug first few scores
-    console.log(
-      `🔍 [TOKEN RECALC] Sample scores:`,
-      airdropScores.slice(0, 5).map((s) => ({
-        fid: s.fid,
-        finalScore: s.finalScore,
-        type: typeof s.finalScore,
-        asNumber: Number(s.finalScore),
-      })),
-    );
-
     const totalAirdropPoints = airdropScores.reduce(
       (sum, score) => sum + Number(score.finalScore),
       0,
     );
-    console.log(
-      `📈 [TOKEN RECALC] Total airdrop points: ${totalAirdropPoints.toLocaleString()}`,
-    );
 
     // Update token allocations for all users using BULK SQL operation
-    console.log(
-      `💰 [TOKEN RECALC] Starting BULK update for ${airdropScores.length} user allocations...`,
-    );
     let totalTokensAllocated = 0;
     const BRND_USD_PRICE = 0.000001365;
     const distributionStats = {
@@ -1878,8 +1547,6 @@ export class AirdropService {
     const fidList: number[] = [];
     const tokenAllocationCases: string[] = [];
     const percentageCases: string[] = [];
-
-    console.log(`🔢 [TOKEN RECALC] Calculating allocations for all users...`);
     for (const score of airdropScores) {
       const finalScore = Number(score.finalScore);
       const percentage = (finalScore / totalAirdropPoints) * 100;
@@ -1918,15 +1585,9 @@ export class AirdropService {
     }
 
     // Execute BULK update using raw SQL with CASE statements
-    console.log(
-      `🚀 [TOKEN RECALC] Executing BULK SQL update for ${fidList.length} users...`,
-    );
-    const updateStartTime = Date.now();
-
     try {
       // Get the correct table name from TypeORM metadata
       const tableName = this.airdropScoreRepository.metadata.tableName;
-      console.log(`📋 [TOKEN RECALC] Using table name: ${tableName}`);
 
       const sql = `
         UPDATE ${tableName} 
@@ -1937,28 +1598,13 @@ export class AirdropService {
         WHERE fid IN (${fidList.join(',')})
       `;
 
-      const result = await this.airdropScoreRepository.query(sql);
-      const updateDuration = Date.now() - updateStartTime;
-
-      console.log(
-        `✅ [TOKEN RECALC] BULK update completed in ${updateDuration}ms!`,
-      );
-      console.log(
-        `📊 [TOKEN RECALC] Updated ${fidList.length} users in a single query`,
-      );
+      await this.airdropScoreRepository.query(sql);
     } catch (error) {
-      console.error(`❌ [TOKEN RECALC] BULK update failed:`, error);
-      console.error(
-        `🔍 [TOKEN RECALC] SQL that failed:`,
-        error.sql?.substring(0, 500) + '...',
-      );
+      console.error(`[AIRDROP] BULK update failed:`, error);
       throw error;
     }
 
     // Set zero allocation for users with 0 score - do this FIRST
-    console.log(
-      `🔄 [TOKEN RECALC] Setting zero allocation for users with 0 score...`,
-    );
     await this.airdropScoreRepository
       .createQueryBuilder()
       .update()
@@ -1973,14 +1619,6 @@ export class AirdropService {
       .createQueryBuilder('score')
       .where('score.finalScore = 0')
       .getCount();
-
-    console.log(`✅ [TOKEN RECALC] Recalculation complete!`);
-    console.log(
-      `💰 [TOKEN RECALC] Total tokens allocated: ${totalTokensAllocated.toLocaleString()}`,
-    );
-    console.log(
-      `📊 [TOKEN RECALC] Users with zero score: ${usersWithZeroScore}`,
-    );
 
     return {
       totalUsers: airdropScores.length,
@@ -1998,8 +1636,6 @@ export class AirdropService {
     bottomUsers: any[];
     statistics: any;
   }> {
-    console.log(`📊 [ANALYTICS] Generating airdrop analytics...`);
-
     const BRND_USD_PRICE = 0.000001365;
 
     // Get all airdrop scores with user info
@@ -2705,19 +2341,10 @@ export class AirdropService {
       percentage: number;
     }>;
   }> {
-    console.log(
-      `🚀 [BULK AIRDROP] Starting OPTIMIZED airdrop calculation for TOP 1111 USERS by points`,
-    );
-
     // STEP 1: Generate database summary first
-    console.log(`📊 [BULK AIRDROP] STEP 1: Generating database summary...`);
     const databaseSummary = await this.getDatabaseSummary();
-    console.log(`✅ [BULK AIRDROP] Database summary completed`);
 
     // STEP 2: Get top 1111 users by points
-    console.log(
-      `🏆 [BULK AIRDROP] STEP 2: Fetching top 1111 users by points...`,
-    );
     const users = await this.userRepository.find({
       select: ['fid', 'username', 'points', 'id'],
       where: {
@@ -2727,24 +2354,10 @@ export class AirdropService {
       take: this.TOP_USERS, // 1111
     });
 
-    console.log(
-      `👑 [BULK AIRDROP] Found ${users.length} eligible users for airdrop`,
-    );
-    console.log(
-      `📦 [BULK AIRDROP] STEP 3: Pre-fetching vote data for all users...`,
-    );
-
     // STEP 3: Pre-fetch all vote data in bulk (OPTIMIZATION)
     const allFids = users.map((u) => u.fid);
     const { votedBrandsCountMap, sharedPodiumsCountMap } =
       await this.preFetchVoteData(allFids);
-    console.log(
-      `✅ [BULK AIRDROP] Pre-fetched vote data for ${allFids.length} users`,
-    );
-
-    console.log(
-      `📦 [BULK AIRDROP] STEP 4: Processing in batches of ${batchSize} users`,
-    );
 
     let processed = 0;
     let successful = 0;
@@ -2763,18 +2376,8 @@ export class AirdropService {
       const batchNumber = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(users.length / batchSize);
 
-      console.log(
-        `📦 [BULK AIRDROP] Processing batch ${batchNumber}/${totalBatches} (users ${i + 1}-${Math.min(i + batchSize, users.length)})`,
-      );
-
       // OPTIMIZATION: Batch fetch Neynar user info for entire batch
-      console.log(
-        `🔍 [BULK AIRDROP] Batch ${batchNumber}: Fetching Neynar user info for ${batchFids.length} users...`,
-      );
       const neynarUserInfoCache = await this.batchGetNeynarUserInfo(batchFids);
-      console.log(
-        `✅ [BULK AIRDROP] Batch ${batchNumber}: Cached ${neynarUserInfoCache.size} user info records`,
-      );
 
       // Process each user in the batch
       for (const user of batch) {
@@ -2793,11 +2396,15 @@ export class AirdropService {
             airdropScore: calculation.finalScore,
           });
 
+          console.log(
+            `[AIRDROP] FID ${user.fid} (${user.username}): Score ${calculation.finalScore.toLocaleString()}, Multiplier ${calculation.totalMultiplier.toFixed(2)}x`,
+          );
+
           successful++;
         } catch (error) {
           console.error(
-            `❌ [BULK AIRDROP] Failed to process user ${user.fid}:`,
-            error,
+            `[AIRDROP] Failed FID ${user.fid}:`,
+            error instanceof Error ? error.message : String(error),
           );
           failed++;
           errors.push({
@@ -2808,30 +2415,16 @@ export class AirdropService {
         processed++;
       }
 
-      console.log(
-        `📊 [BULK AIRDROP] Batch ${batchNumber} complete. Progress: ${processed}/${users.length} (${Math.round((processed / users.length) * 100)}%)`,
-      );
-
       // Reduced delay - only 500ms between batches (was 2000ms)
       if (i + batchSize < users.length) {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
-    console.log(`🏁 [BULK AIRDROP] Airdrop score calculation complete!`);
-    console.log(
-      `📈 [BULK AIRDROP] Summary: ${successful} successful, ${failed} failed out of ${processed} total users`,
-    );
-
     // STEP 5: Calculate token distribution
-    console.log(`💰 [BULK AIRDROP] STEP 5: Calculating token distribution...`);
-
     const totalAirdropPoints = airdropCalculations.reduce(
       (sum, calc) => sum + calc.airdropScore,
       0,
-    );
-    console.log(
-      `📊 [BULK AIRDROP] Total airdrop points across all users: ${totalAirdropPoints.toLocaleString()}`,
     );
 
     // Update each user's airdrop score with proper token allocation
@@ -2868,43 +2461,19 @@ export class AirdropService {
       .sort((a, b) => b.airdropScore - a.airdropScore)
       .slice(0, 20); // Top 20 for summary
 
-    console.log(`💰 [BULK AIRDROP] Token distribution complete!`);
-    console.log(
-      `🎯 [BULK AIRDROP] Total tokens allocated: ${totalTokensAllocated.toLocaleString()} / ${this.TOTAL_ALLOCATION.toLocaleString()}`,
-    );
-    console.log(
-      `📊 [BULK AIRDROP] Top airdrop scorer: ${topAirdropScores[0]?.username} with ${topAirdropScores[0]?.airdropScore.toLocaleString()} points (${topAirdropScores[0]?.tokenAllocation.toLocaleString()} tokens)`,
-    );
-
     // STEP 6: Recalculate token distributions (only if no snapshot exists yet)
-    console.log(`🔍 [BULK AIRDROP] STEP 6: Checking for existing snapshots...`);
     const existingSnapshotsCount = await this.airdropSnapshotRepository.count();
 
     if (existingSnapshotsCount === 0) {
-      console.log(
-        `🔄 [BULK AIRDROP] No snapshots found - recalculating token distributions...`,
-      );
       try {
-        const tokenDistribution = await this.recalculateTokenDistribution();
-        console.log(
-          `✅ [BULK AIRDROP] Token distribution recalculated successfully!`,
-          {
-            totalUsers: tokenDistribution.totalUsers,
-            totalTokensAllocated:
-              tokenDistribution.totalTokensAllocated.toLocaleString(),
-          },
-        );
+        await this.recalculateTokenDistribution();
       } catch (error) {
         console.error(
-          `❌ [BULK AIRDROP] Failed to recalculate token distribution:`,
+          `[AIRDROP] Failed to recalculate token distribution:`,
           error,
         );
         // Don't throw - allow the function to continue and return results
       }
-    } else {
-      console.log(
-        `⚠️ [BULK AIRDROP] ${existingSnapshotsCount} snapshot(s) exist - skipping token recalculation to preserve frozen allocations`,
-      );
     }
 
     return {
@@ -2936,25 +2505,13 @@ export class AirdropService {
     snapshotId: number;
     migratedUsers: number;
   }> {
-    console.log('----------------------------------------------------');
-    console.log(
-      '🌳 [START] Starting Airdrop Snapshot Generation (MerkleTreeJS)',
-    );
-    console.log('----------------------------------------------------');
-
     // 1. Delete all existing snapshots (leaves will be deleted via CASCADE)
     const existingSnapshotsCount = await this.airdropSnapshotRepository.count();
     if (existingSnapshotsCount > 0) {
-      console.log(
-        `🗑️  [CLEANUP] Deleting ${existingSnapshotsCount} existing snapshot(s) and their leaves...`,
-      );
       await this.airdropSnapshotRepository
         .createQueryBuilder()
         .delete()
         .execute();
-      console.log(`✅ [CLEANUP] Deleted all existing snapshots`);
-    } else {
-      console.log(`ℹ️  [CLEANUP] No existing snapshots to delete`);
     }
 
     const TOP_USERS = 1111;
@@ -2962,7 +2519,6 @@ export class AirdropService {
     // 2. Get top users from airdrop scores
     // Assuming getLeaderboard is available in your class context
     const topUsers: AirdropScore[] = await this.getLeaderboard(TOP_USERS);
-    console.log(`📊 [LEADERBOARD] Found ${topUsers.length} users for snapshot`);
 
     if (topUsers.length === 0) {
       throw new Error('No users found in leaderboard');
@@ -3009,10 +2565,6 @@ export class AirdropService {
       });
     });
 
-    console.log(
-      `💰 [TOKENS] Total: ${totalTokensFormatted.toLocaleString()} tokens (base amount)`,
-    );
-
     // 4. Generate Merkle Tree
     // CRITICAL: We must sort the input data by FID first to ensure deterministic ordering
     // when we rebuild the tree later for proofs.
@@ -3021,18 +2573,12 @@ export class AirdropService {
     // Extract just the hashes for the tree generation
     const leafHashes = sortedLeafData.map((x) => x.leafHash);
 
-    console.log(
-      `🌿 [TREE] Creating MerkleTree from ${leafHashes.length} leaves with sortPairs: true`,
-    );
-
     // CRITICAL: sortPairs: true makes it compatible with OpenZeppelin's verify()
     const tree = new MerkleTree(leafHashes, keccak256, {
       sortPairs: true,
     });
 
     const merkleRoot = tree.getHexRoot();
-
-    console.log(`🔑 [MERKLE ROOT] Generated: ${merkleRoot}`);
 
     // 5. Create snapshot record
     const snapshot = this.airdropSnapshotRepository.create({
@@ -3046,12 +2592,6 @@ export class AirdropService {
     });
 
     const savedSnapshot = await this.airdropSnapshotRepository.save(snapshot);
-    console.log(`💾 [SNAPSHOT] Saved with ID: ${savedSnapshot.id}`);
-
-    // 6. Prepare leaf data for bulk insert
-    console.log(
-      `🍃 [LEAVES] Preparing to bulk insert ${sortedLeafData.length} leaf records...`,
-    );
 
     // 7. Bulk insert leaves using raw SQL for maximum performance
     // Using transaction to ensure data integrity
@@ -3062,10 +2602,6 @@ export class AirdropService {
           // Each row has 7 values, so 500 rows = 3500 placeholders (safe limit)
           const BATCH_SIZE = 500;
           const totalBatches = Math.ceil(sortedLeafData.length / BATCH_SIZE);
-
-          console.log(
-            `🍃 [LEAVES] Inserting in ${totalBatches} batch(es) of up to ${BATCH_SIZE} records each...`,
-          );
 
           for (let i = 0; i < totalBatches; i++) {
             const start = i * BATCH_SIZE;
@@ -3098,15 +2634,7 @@ export class AirdropService {
             `;
 
             await transactionalEntityManager.query(sql, values);
-
-            console.log(
-              `🍃 [LEAVES] ✅ Batch ${i + 1}/${totalBatches} saved (${batch.length} records)`,
-            );
           }
-
-          console.log(
-            `🍃 [LEAVES] ✅ Successfully inserted all ${sortedLeafData.length} leaf records`,
-          );
         },
       );
     } catch (error) {
@@ -3119,12 +2647,6 @@ export class AirdropService {
       { id: savedSnapshot.id },
       { isFrozen: true },
     );
-
-    console.log('✅ [COMPLETE] Airdrop snapshot generation complete');
-    console.log('====================================================');
-    console.log(`🆔 Snapshot ID: ${savedSnapshot.id}`);
-    console.log(`🔑 Merkle Root: ${merkleRoot}`);
-    console.log('====================================================');
 
     return {
       merkleRoot,
@@ -3149,8 +2671,6 @@ export class AirdropService {
     merkleRoot: string;
     snapshotId: number;
   } | null> {
-    console.log(`🔍 [PROOF] Generating proof for FID: ${fid}`);
-
     // 1. Get the active snapshot and its leaves
     const snapshot = await this.airdropSnapshotRepository.findOne({
       where: snapshotId ? { id: snapshotId } : { isActive: true },
@@ -3158,32 +2678,20 @@ export class AirdropService {
     });
 
     if (!snapshot) {
-      console.log(
-        `❌ [PROOF] No ${snapshotId ? 'snapshot with ID ' + snapshotId : 'active snapshot'} found`,
-      );
       return null;
     }
 
     // 2. Find the specific user's leaf
     const userLeaf = snapshot.leaves.find((leaf) => leaf.fid === fid);
     if (!userLeaf) {
-      console.log(`❌ [PROOF] FID ${fid} not found in snapshot ${snapshot.id}`);
       return null;
     }
-
-    console.log(
-      `🎯 [PROOF] Found user leaf in database: FID ${userLeaf.fid}, Amount ${userLeaf.baseAmount}`,
-    );
 
     // 3. Rebuild Merkle Tree
     // CRITICAL: We must sort the leaves exactly as we did during generation
     const sortedLeaves = snapshot.leaves.sort((a, b) => a.fid - b.fid);
 
     const allLeafHashes = sortedLeaves.map((l) => l.leafHash);
-
-    console.log(
-      `🔍 [DEBUG] Rebuilding tree with ${allLeafHashes.length} leaves (sortPairs: true)`,
-    );
 
     const tree = new MerkleTree(allLeafHashes, keccak256, {
       sortPairs: true,
@@ -3192,26 +2700,22 @@ export class AirdropService {
     // 4. Verify Root Matches Database
     const rebuiltRoot = tree.getHexRoot();
     if (rebuiltRoot !== snapshot.merkleRoot) {
-      console.error(`❌ [PROOF] Tree reconstruction failed!`);
+      console.error(`[AIRDROP] Tree reconstruction failed!`);
       console.error(`Expected root: ${snapshot.merkleRoot}`);
       console.error(`Rebuilt root: ${rebuiltRoot}`);
       throw new Error('Merkle tree reconstruction failed - roots do not match');
     }
-    console.log(`✅ [VERIFICATION] Root matches: ${rebuiltRoot}`);
 
     // 5. Generate Proof
     // We use the stored leafHash directly, because that's what the tree is built of.
     const targetLeaf = userLeaf.leafHash;
     const proof = tree.getHexProof(targetLeaf);
 
-    console.log(`🔢 [PROOF] Generated proof array length: ${proof.length}`);
-
     // 6. Local Verification
     const isValid = tree.verify(proof, targetLeaf, rebuiltRoot);
-    console.log(`🔍 [PROOF] Local verification result: ${isValid}`);
 
     if (!isValid) {
-      console.error(`❌ [PROOF] Local verification failed for FID ${fid}`);
+      console.error(`[AIRDROP] Local verification failed for FID ${fid}`);
       return null;
     }
 
