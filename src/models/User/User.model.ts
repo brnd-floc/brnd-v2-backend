@@ -141,6 +141,9 @@ export class User {
   lastVoteReminderSent: Date;
 
   @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
     default: 0.0,
   })
   neynarScore: number;

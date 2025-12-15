@@ -231,6 +231,7 @@ export class BrandController {
         'stateScoreMonth', // NEW
         'rankingMonth', // NEW
         'banned',
+        'scoreDay',
       ],
       [],
       order,
@@ -239,6 +240,7 @@ export class BrandController {
       pageId,
       limit,
     );
+    console.log('BRANDS', brands);
 
     return hasResponse(res, {
       pageId,
