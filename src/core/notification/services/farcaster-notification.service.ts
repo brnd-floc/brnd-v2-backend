@@ -354,6 +354,81 @@ export class FarcasterNotificationService {
   }
 
   /**
+   * Send notification to a specific user by FID
+   */
+  async sendNotificationToSpecificFid(
+    fid: number,
+    title: string,
+    body: string,
+    targetUrl: string,
+    notificationId: string,
+  ): Promise<{ sent: boolean; message: string }> {
+    // Validate content against Farcaster limits
+    this.validateNotificationContent(title, body, notificationId);
+
+    this.logger.log(
+      `📤 Sending notification to FID ${fid}: ${title} (ID: ${notificationId})`,
+    );
+
+    // Get the specific user
+    const user = await this.userRepository.findOne({
+      where: {
+        fid,
+        notificationToken: Not(IsNull()),
+        notificationsEnabled: true,
+      },
+      select: ['id', 'fid', 'notificationToken'],
+    });
+
+    if (!user) {
+      const message = `User with FID ${fid} not found or doesn't have notifications enabled`;
+      this.logger.warn(`⚠️ ${message}`);
+      return { sent: false, message };
+    }
+
+    // Check rate limiting
+    if (!this.canSendToUser(user.id)) {
+      const message = `User FID ${fid} is rate-limited`;
+      this.logger.warn(`⚠️ ${message}`);
+      return { sent: false, message };
+    }
+
+    try {
+      const response = await fetch(this.NOTIFICATION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notificationId,
+          title,
+          body,
+          targetUrl,
+          tokens: [user.notificationToken],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const message = `Failed to send notification: ${response.status} ${errorText}`;
+        this.logger.error(`❌ ${message}`);
+        return { sent: false, message };
+      }
+
+      // Record notification for rate limiting
+      this.recordNotificationSent(user.id);
+
+      const message = `Notification sent successfully to FID ${fid}`;
+      this.logger.log(`✅ ${message}`);
+      return { sent: true, message };
+    } catch (error) {
+      const message = `Error sending notification to FID ${fid}: ${error.message}`;
+      this.logger.error(`❌ ${message}`, error);
+      return { sent: false, message };
+    }
+  }
+
+  /**
    * Store notification token for a user (called from webhook)
    */
   async storeNotificationToken(
