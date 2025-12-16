@@ -823,10 +823,6 @@ export class BrandService {
 
       const totalFans = parseInt(fanCount?.count || '0');
 
-      console.log(
-        `📊 [BrandService] Brand ${brand.name} has ${totalFans} unique fans`,
-      );
-
       // Fetch Neynar data (existing logic)
       const neynar = new NeynarService();
       let info;

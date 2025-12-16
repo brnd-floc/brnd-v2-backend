@@ -719,12 +719,10 @@ export class AirdropService {
   private async calculateNeynarScoreMultiplier(fid: number): Promise<{
     multiplier: number;
     neynarScore: number;
-    hasPowerBadge: boolean;
   }> {
     try {
       const userInfo = await this.getNeynarUserInfo(fid);
-      const hasPowerBadge = userInfo?.power_badge || false;
-      const neynarScore = hasPowerBadge ? 1.0 : 0.8;
+      const neynarScore = userInfo?.score;
 
       let multiplier = 1.0;
 
@@ -736,10 +734,10 @@ export class AirdropService {
         multiplier = 1.2;
       }
 
-      return { multiplier, neynarScore, hasPowerBadge };
+      return { multiplier, neynarScore };
     } catch (error) {
       console.error('Error calculating Neynar score multiplier:', error);
-      return { multiplier: 1.0, neynarScore: 0, hasPowerBadge: false };
+      return { multiplier: 1.0, neynarScore: 0 };
     }
   }
 
@@ -1125,7 +1123,6 @@ export class AirdropService {
         ],
         details: {
           neynarScore: neynarScoreResult.neynarScore,
-          hasPowerBadge: neynarScoreResult.hasPowerBadge,
           nextTier:
             neynarScoreResult.neynarScore >= 1.0
               ? null
@@ -1134,7 +1131,7 @@ export class AirdropService {
                 : neynarScoreResult.neynarScore >= 0.85
                   ? { requirement: 0.9, multiplier: 1.5 }
                   : { requirement: 0.85, multiplier: 1.2 },
-          summary: `Neynar score: ${neynarScoreResult.neynarScore} (Power badge: ${neynarScoreResult.hasPowerBadge ? 'Yes' : 'No'})`,
+          summary: `Neynar score: ${neynarScoreResult.neynarScore}`,
         },
       },
 
@@ -2285,7 +2282,7 @@ export class AirdropService {
     hasPowerBadge: boolean;
   } {
     const hasPowerBadge = userInfo?.power_badge || false;
-    const neynarScore = hasPowerBadge ? 1.0 : 0.8;
+    const neynarScore = userInfo?.score;
 
     let multiplier = 1.0;
     if (neynarScore >= 1.0) multiplier = 1.8;
@@ -2346,7 +2343,15 @@ export class AirdropService {
 
     // STEP 2: Get top 1111 users by points
     const users = await this.userRepository.find({
-      select: ['fid', 'username', 'points', 'id'],
+      select: [
+        'fid',
+        'username',
+        'points',
+        'id',
+        'dailyStreak',
+        'maxDailyStreak',
+        'brndPowerLevel',
+      ],
       where: {
         fid: Not(In([5431, 6099, 8109, 222144])),
       },
@@ -2396,8 +2401,37 @@ export class AirdropService {
             airdropScore: calculation.finalScore,
           });
 
+          // Calculate current position based on sorted scores (descending)
+          // Sort all calculations so far by score descending, then by FID ascending for stability
+          const sortedCalculations = [...airdropCalculations].sort((a, b) => {
+            if (b.airdropScore !== a.airdropScore) {
+              return b.airdropScore - a.airdropScore; // Higher score first
+            }
+            return a.fid - b.fid; // Tie-breaker: lower FID first
+          });
+
+          // Find the index of this user in the sorted array
+          const userIndex = sortedCalculations.findIndex(
+            (calc) => calc.fid === user.fid,
+          );
+
+          // Calculate position accounting for ties: users with same score share position
+          // Position = 1 + (number of users with strictly higher score)
+          const userScore = calculation.finalScore;
+          const usersWithHigherScore = sortedCalculations.filter(
+            (calc) => calc.airdropScore > userScore,
+          ).length;
+          const position = usersWithHigherScore + 1;
+
+          // Calculate position on points leaderboard (users array is already sorted by points DESC)
+          // Count how many users have strictly more points than current user
+          const usersWithMorePoints = users.filter(
+            (u) => u.points > user.points,
+          ).length;
+          const pointsPosition = usersWithMorePoints + 1;
+
           console.log(
-            `[AIRDROP] FID ${user.fid} (${user.username}): Score ${calculation.finalScore.toLocaleString()}, Multiplier ${calculation.totalMultiplier.toFixed(2)}x`,
+            `[AIRDROP] FID ${user.fid} (@${user.username}): Airdrop Score: ${calculation.totalMultiplier.toFixed(2)}x${user.points} points=${calculation.finalScore.toLocaleString()}, position #${pointsPosition}/1111 on the $BRND leaderboard. Current streak: ${user.dailyStreak} days. Max streak: ${user.maxDailyStreak} days. BRND Power Level: ${user.brndPowerLevel}.`,
           );
 
           successful++;
@@ -2460,6 +2494,24 @@ export class AirdropService {
     const topAirdropScores = updatedCalculations
       .sort((a, b) => b.airdropScore - a.airdropScore)
       .slice(0, 20); // Top 20 for summary
+
+    // Calculate final positions for all users (accounting for ties)
+    const sortedByScore = [...updatedCalculations].sort(
+      (a, b) => b.airdropScore - a.airdropScore,
+    );
+
+    // Log final results for each user with token allocation and position
+    for (const calc of sortedByScore) {
+      // Calculate position: 1 + (number of users with strictly higher score)
+      const usersWithHigherScore = sortedByScore.filter(
+        (c) => c.airdropScore > calc.airdropScore,
+      ).length;
+      const position = usersWithHigherScore + 1;
+
+      console.log(
+        `[AIRDROP] FID ${calc.fid} (@${calc.username}) will get ${calc.tokenAllocation.toLocaleString()} $BRND on the airdrop 1 and is #${position}/1111 on the leaderboard.`,
+      );
+    }
 
     // STEP 6: Recalculate token distributions (only if no snapshot exists yet)
     const existingSnapshotsCount = await this.airdropSnapshotRepository.count();

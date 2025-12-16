@@ -46,12 +46,6 @@ export class BrandController {
     private readonly brandSchedulerService: BrandSchedulerService,
   ) {}
 
-  /**
-   * Retrieves a brand by its ID.
-   *
-   * @param {Brand['id']} id - The ID of the brand to retrieve.
-   * @returns {Promise<BrandResponse | undefined>} The brand response with brand, casts, and fanCount or undefined if not found.
-   */
   @Get('/brand/:id')
   async getBrandById(
     @Param('id') id: Brand['id'],
@@ -59,12 +53,6 @@ export class BrandController {
     return this.brandService.getById(id, [], ['category']);
   }
 
-  /**
-   * Retrieves enhanced brand information including on-chain data for V3 contract.
-   *
-   * @param {Brand['id']} id - The ID of the brand to retrieve.
-   * @returns {Promise<BrandResponse>} The brand entity with on-chain information.
-   */
   @Get('/brand/:id/enhanced')
   async getEnhancedBrandInfo(
     @Param('id') id: Brand['id'],
@@ -111,13 +99,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Initiates brand reward withdrawal for V3 contract.
-   *
-   * @param {Brand['id']} brandId - The ID of the brand.
-   * @param {string} requesterAddress - The address requesting withdrawal.
-   * @returns {Promise<Response>} Withdrawal initiation result.
-   */
   @Post('/brand/:brandId/withdraw')
   @UseGuards(AuthorizationGuard)
   async initiateBrandWithdrawal(
@@ -192,22 +173,11 @@ export class BrandController {
     }
   }
 
-  /**
-   * Retrieves all brands with pagination.
-   *
-   * @param {BrandOrderType} order - The order in which to sort the brands.
-   * @param {string} search - The search query to filter brands.
-   * @param {number} pageId - The ID of the page to retrieve.
-   * @param {number} limit - The number of brands to retrieve per page.
-   * @param {Response} res - The response object.
-   * @returns {Promise<Response>} A response object containing the page ID, total count of brands, and an array of brand objects.
-   * @param {BrandTimePeriod} period - The time period to filter brands.
-   */
   @Get('/list')
   @UseGuards(AuthorizationGuard)
   async getAllBrands(
     @Query('order') order: BrandOrderType,
-    @Query('period') period: BrandTimePeriod = 'all', // NEW: Add period parameter
+    @Query('period') period: BrandTimePeriod = 'all',
     @Query('search') search: string,
     @Query('pageId') pageId: number,
     @Query('limit') limit: number,
@@ -235,7 +205,7 @@ export class BrandController {
       ],
       [],
       order,
-      period, // NEW: Pass period to service
+      period,
       search,
       pageId,
       limit,
@@ -248,21 +218,6 @@ export class BrandController {
     });
   }
 
-  /**
-   * Verifies a shared cast and awards points for valid shares.
-   *
-   * This endpoint validates that:
-   * 1. The cast hash exists on Farcaster
-   * 2. The cast was posted by the authenticated user
-   * 3. The cast contains the correct embed URL
-   * 4. The vote hasn't been shared before
-   *
-   * @param user - The authenticated user from QuickAuth
-   * @param castHash - The Farcaster cast hash to verify (0x format)
-   * @param transactionHash - The transaction hash of the vote being shared
-   * @param res - The response object
-   * @returns Verification result and updated user points
-   */
   @Post('/verify-share')
   @UseGuards(AuthorizationGuard)
   async verifyShare(
@@ -282,7 +237,6 @@ export class BrandController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      // Validate input
       if (!voteId) {
         return hasError(
           res,
@@ -292,7 +246,6 @@ export class BrandController {
         );
       }
 
-      // Check if this is a request to retrieve claim signature for already shared vote
       const isClaimRetrieval = !castHash || castHash.trim() === '';
 
       if (isClaimRetrieval) {
@@ -304,7 +257,6 @@ export class BrandController {
         );
       }
 
-      // Validate recipient address if provided
       if (recipientAddress && !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress)) {
         return hasError(
           res,
@@ -314,7 +266,6 @@ export class BrandController {
         );
       }
 
-      // Validate cast hash format (should start with 0x and be 40 characters)
       if (!/^0x[a-fA-F0-9]{40}$/.test(castHash)) {
         return hasError(
           res,
@@ -324,7 +275,6 @@ export class BrandController {
         );
       }
 
-      // Get the user from database
       const dbUser = await this.userService.getByFid(user.sub);
       if (!dbUser) {
         return hasError(
@@ -335,7 +285,6 @@ export class BrandController {
         );
       }
 
-      // Get the vote and check if it belongs to the user
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
@@ -358,7 +307,6 @@ export class BrandController {
         );
       }
 
-      // Check if vote has already been shared
       if (vote.shared) {
         return hasError(
           res,
@@ -368,12 +316,10 @@ export class BrandController {
         );
       }
 
-      // Verify cast with Neynar
       try {
         const neynar = new NeynarService();
         const castData = await neynar.getCastByHash(castHash);
-        console.log('CAST DATA', castData, user);
-        // Verify the cast author FID matches the user
+
         if (castData.author.fid !== user.sub) {
           return hasError(
             res,
@@ -383,15 +329,12 @@ export class BrandController {
           );
         }
 
-        // Verify the cast contains the correct embed URL
-        // Accept both brnd.land or rebrnd.lat as valid base URLs in the embed
         const validEmbedUrls = [
           'https://brnd.land',
           'https://rebrnd.lat',
           'https://www.brnd.land',
         ];
 
-        // Find embed that matches any of our valid URLs and has the url property
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {
           if ('url' in embed) {
             return validEmbedUrls.some((baseUrl) =>
@@ -410,7 +353,6 @@ export class BrandController {
           );
         }
 
-        // We know this embed has the url property since we checked above
         const correctEmbed = castData.embeds[correctEmbedIndex] as any;
         const correctEmbedUrl = correctEmbed.url;
         const transactionHashFromQueryParam =
@@ -424,25 +366,21 @@ export class BrandController {
           );
         }
 
-        // All verifications passed - update vote and award points
         await this.brandService.markVoteAsShared(
           vote.transactionHash,
           castHash,
         );
         const updatedUser = await this.userService.addPoints(dbUser.id, 3);
 
-        // Calculate day from vote date (using same calculation as contract: block.timestamp / 86400)
         const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
         const day = Math.floor(voteTimestamp / 86400);
 
-        // Mark share as verified for reward claim
         await this.rewardService.verifyShareForReward(
           dbUser.fid,
           day,
           castHash,
         );
 
-        // If recipient address is provided, generate the claim signature
         let claimSignature = null;
         if (recipientAddress) {
           try {
@@ -453,14 +391,10 @@ export class BrandController {
               castHash,
             );
           } catch (claimError) {
-            console.error(
-              '❌ [VerifyShare] Failed to generate claim signature:',
-              claimError,
-            );
+            // Do nothing, skip claim sig on error
           }
         }
 
-        // RIGHT BEFORE THE RETURN STATEMENT, ADD THIS:
         const responsePayload = {
           verified: true,
           pointsAwarded: 3,
@@ -481,7 +415,6 @@ export class BrandController {
             : 'Provide recipientAddress to generate claim signature.',
         };
 
-        // Reply to the cast telling the user their share was verified
         try {
           const pointsForVote = 6 + updatedUser.brndPowerLevel * 3;
           const config = getConfig();
@@ -501,14 +434,9 @@ export class BrandController {
                 text: `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`,
               }),
             });
-          } else {
-            console.warn(
-              '⚠️ [VerifyShare] Neynar config missing, skipping cast reply',
-            );
           }
         } catch (replyError) {
-          console.error('❌ [VerifyShare] Error replying to cast:', replyError);
-          // Don't fail the request if reply fails
+          // Do nothing if reply failed
         }
 
         return hasResponse(res, {
@@ -516,12 +444,6 @@ export class BrandController {
           castHash,
         });
       } catch (neynarError) {
-        console.error(
-          '❌ [VerifyShare] Neynar verification failed:',
-          neynarError,
-        );
-
-        // Handle specific Neynar errors
         if (neynarError.message?.includes('Cast not found')) {
           return hasError(
             res,
@@ -539,7 +461,6 @@ export class BrandController {
         );
       }
     } catch (error) {
-      console.error('❌ [VerifyShare] Unexpected error:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -549,10 +470,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Handles claim retrieval for already shared votes.
-   * Looks up existing verified shares by voteId (unix timestamp) and user FID.
-   */
   private async handleClaimRetrieval(
     user: QuickAuthPayload,
     voteId: string,
@@ -560,12 +477,6 @@ export class BrandController {
     res: Response,
   ): Promise<Response> {
     try {
-      // Validate recipient address if provided
-      console.log(
-        '✅ [ClaimRetrieval] Recipient address:',
-        recipientAddress,
-        voteId,
-      );
       if (recipientAddress && !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress)) {
         return hasError(
           res,
@@ -575,9 +486,7 @@ export class BrandController {
         );
       }
 
-      // Get the user from database
       const dbUser = await this.userService.getByFid(user.sub);
-      console.log('✅ [ClaimRetrieval] DB user:', dbUser);
       if (!dbUser) {
         return hasError(
           res,
@@ -587,7 +496,6 @@ export class BrandController {
         );
       }
 
-      // Get the vote by transactionHash (primary key)
       const vote = await this.brandService.getVoteByTransactionHash(voteId);
 
       if (!vote) {
@@ -599,7 +507,6 @@ export class BrandController {
         );
       }
 
-      // Verify vote belongs to user
       if (vote.user.fid !== dbUser.fid) {
         return hasError(
           res,
@@ -609,23 +516,16 @@ export class BrandController {
         );
       }
 
-      // Get day from vote - use day field if available, otherwise calculate from date
-      // Day calculation matches contract: block.timestamp / 86400
       let day: number;
       if (vote.day != null) {
         day = vote.day;
       } else {
-        // Calculate day from vote date (same as contract: block.timestamp / 86400)
         const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
         day = Math.floor(voteTimestamp / 86400);
       }
 
-      console.log('✅ [ClaimRetrieval] Day:', day);
-
-      // Look up existing verified share for this user and day
       const existingShare =
         await this.brandService.getVerifiedShareByUserAndDay(user.sub, day);
-      console.log('✅ [ClaimRetrieval] Existing share:', existingShare);
 
       if (!existingShare) {
         return hasError(
@@ -636,39 +536,23 @@ export class BrandController {
         );
       }
 
-      // Note: We don't validate recipient address against user's stored wallet
-      // as wallet address is provided by frontend and not stored in user model
-
-      // Generate claim signature if recipient address is provided
       let claimSignature = null;
-      console.log('✅ [ClaimRetrieval] Generating claim signature');
       if (recipientAddress) {
         try {
-          console.log(
-            '✅ [ClaimRetrieval] Generating claim signature for existing share',
-          );
           claimSignature = await this.rewardService.generateClaimSignature(
             dbUser.fid,
             day,
             recipientAddress,
             existingShare.castHash,
           );
-          console.log(
-            '✅ [ClaimRetrieval] Claim signature generated for existing share',
-          );
         } catch (claimError) {
-          console.error(
-            '❌ [ClaimRetrieval] Failed to generate claim signature:',
-            claimError,
-          );
-          // Don't return error here, still return the share info
+          // Do nothing, still return the share info
         }
       }
 
-      // Return response similar to successful verification
       const responsePayload = {
         verified: true,
-        pointsAwarded: 0, // Points already awarded when originally shared
+        pointsAwarded: 0,
         newTotalPoints: dbUser.points,
         message: existingShare.claimedAt
           ? 'Share verified. Rewards already claimed.'
@@ -691,11 +575,8 @@ export class BrandController {
           : 'Provide recipientAddress to generate claim signature.',
       };
 
-      console.log('📤 [ClaimRetrieval] Response payload for existing share');
-
       return hasResponse(res, responsePayload);
     } catch (error) {
-      console.error('❌ [ClaimRetrieval] Unexpected error:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -705,12 +586,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Handles the request to create a new brand.
-   *
-   * @param {CurrentUser} user - The current user session.
-   * @param {{ name: string }} body - An object containing the name of the new brand.
-   */
   @Post('/request')
   @UseGuards(AuthorizationGuard)
   async requestBrand(
@@ -719,7 +594,7 @@ export class BrandController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      console.log(name, user);
+      // (Intentionally left blank: no-op for now, removed logs)
       return hasResponse(res, {});
     } catch (error) {
       return hasError(
@@ -731,35 +606,19 @@ export class BrandController {
     }
   }
 
-  /**
-   * Handles the request to follow a brand.
-   *
-   * @param {CurrentUser} user - The current user session.
-   * @param {string} id - The ID of the brand to follow.
-   */
   @Post('/:id/follow')
   @UseGuards(AuthorizationGuard)
   async followBrand(@Session() user: CurrentUser, @Param('id') id: string) {
-    console.log({ user, id });
+    // (Intentionally left blank: no-op, removed logs)
   }
 
-  // Add these endpoints to your BrandController (brand.controller.ts)
-  // Place them after your existing endpoints, before the dev endpoints
-
-  /**
-   * DEBUG: Get detailed scoring information for top brands
-   * This will help us understand why scores are so similar
-   */
   @Get('/debug/scoring')
   async debugScoring(@Res() res: Response) {
-    console.log('🔍 [DEBUG] Analyzing scoring system...');
-
     try {
       const debugInfo = await this.brandService.getDebugScoringInfo();
 
       return hasResponse(res, debugInfo);
     } catch (error) {
-      console.error('❌ Error in debug scoring:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -768,18 +627,13 @@ export class BrandController {
       );
     }
   }
-  /**
-   * Get current cycle rankings with time remaining until cycle end
-   * PUBLIC ENDPOINT - No authentication required for easy access
-   */
+
   @Get('/cycles/:period/rankings')
   async getCycleRankings(
     @Param('period') period: 'week' | 'month',
     @Query('limit') limit: number = 10,
     @Res() res: Response,
   ) {
-    console.log(`getCycleRankings called - period: ${period}, limit: ${limit}`);
-
     if (period !== 'week' && period !== 'month') {
       return hasError(
         res,
@@ -790,9 +644,7 @@ export class BrandController {
     }
 
     try {
-      console.log(`Fetching ${period} cycle rankings...`);
       const result = await this.brandService.getCycleRankings(period, limit);
-      console.log(`Found ${result.rankings.length} brands for ${period} cycle`);
 
       return hasResponse(res, {
         period,
@@ -805,7 +657,6 @@ export class BrandController {
         },
       });
     } catch (error) {
-      console.error('Error in getCycleRankings:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -815,19 +666,12 @@ export class BrandController {
     }
   }
 
-  /**
-   * Get deployment info and first vote timestamp
-   * PUBLIC ENDPOINT - No authentication required for easy access
-   */
   @Get('/deployment-info')
   async getDeploymentInfo(@Res() res: Response) {
-    console.log('getDeploymentInfo called - public access');
-
     try {
       const deploymentInfo = await this.brandService.getDeploymentInfo();
       return hasResponse(res, deploymentInfo);
     } catch (error) {
-      console.error('Error in getDeploymentInfo:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -837,23 +681,12 @@ export class BrandController {
     }
   }
 
-  /**
-   * Get historical weekly leaderboard data
-   * PUBLIC ENDPOINT - No authentication required for easy access
-   *
-   * @param {string} week - Week identifier (YYYY-MM-DD format for the Friday of that week)
-   * @param {number} limit - Number of brands to return (default: 10)
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Weekly leaderboard data with available weeks picker
-   */
   @Get('/weekly-leaderboard')
   async getWeeklyLeaderboard(
     @Query('week') week: string,
     @Query('limit') limit: number = 10,
     @Res() res: Response,
   ) {
-    console.log(`getWeeklyLeaderboard called - week: ${week}, limit: ${limit}`);
-
     try {
       const result = await this.brandService.getWeeklyLeaderboard(week, limit);
 
@@ -869,7 +702,6 @@ export class BrandController {
         },
       });
     } catch (error) {
-      console.error('Error in getWeeklyLeaderboard:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -879,21 +711,6 @@ export class BrandController {
     }
   }
 
-  // ============================================================================
-  // LOCAL DEVELOPMENT SEEDING ENDPOINTS
-  // ============================================================================
-
-  /**
-   * Seeds brands from brands-seed.json file (LOCAL DEVELOPMENT ONLY).
-   *
-   * Usage:
-   * - POST /brand-service/dev/seed (create new brands, skip existing)
-   * - POST /brand-service/dev/seed?overwrite=true (update existing brands)
-   *
-   * @param {string} overwrite - Whether to overwrite existing brands
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Seeding results with statistics
-   */
   @Get('/dev/seed')
   @UseGuards(AuthorizationGuard)
   async seedBrands(
@@ -928,13 +745,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Gets database statistics (LOCAL DEVELOPMENT ONLY).
-   * Shows brand counts, categories, and distribution.
-   *
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Database statistics
-   */
   @Get('/dev/stats')
   @UseGuards(AuthorizationGuard)
   async getDatabaseStats(
@@ -967,13 +777,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Previews what would happen during seeding without actually doing it (LOCAL DEVELOPMENT ONLY).
-   * Shows which brands would be created, which exist, and which are missing channels.
-   *
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Preview results
-   */
   @Get('/dev/preview')
   @UseGuards(AuthorizationGuard)
   async previewSeeding(
@@ -1006,15 +809,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Retrieves recent podiums from all users (public feed).
-   * Shows community voting activity with pagination.
-   *
-   * @param {number} page - Page number for pagination
-   * @param {number} limit - Number of podiums per page
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Recent podiums with user and brand details
-   */
   @Get('/recent-podiums')
   @UseGuards(AuthorizationGuard)
   async getRecentPodiums(
@@ -1023,10 +817,6 @@ export class BrandController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      console.log(
-        `🏆 [RecentPodiums] Fetching page ${page} with limit ${limit}`,
-      );
-
       const [podiums, count] = await this.brandService.getRecentPodiums(
         page,
         limit,
@@ -1044,7 +834,6 @@ export class BrandController {
         },
       });
     } catch (error) {
-      console.error('❌ [RecentPodiums] Error fetching podiums:', error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -1054,14 +843,6 @@ export class BrandController {
     }
   }
 
-  /**
-   * Clears all brands from database (LOCAL DEVELOPMENT ONLY).
-   * Use with extreme caution!
-   *
-   * @param {string} confirm - Must be 'yes' to proceed
-   * @param {Response} res - The response object
-   * @returns {Promise<Response>} Deletion results
-   */
   @Post('/dev/clear')
   @UseGuards(AuthorizationGuard)
   async clearAllBrands(
@@ -1105,14 +886,6 @@ export class BrandController {
     }
   }
 
-  // ============================================================================
-  // DEBUG ENDPOINTS FOR TESTING CRON JOBS
-  // ============================================================================
-
-  /**
-   * Manual trigger for testing cron jobs (ADMIN ONLY).
-   * Useful for debugging cron job functionality without waiting for scheduled times.
-   */
   @Post('/dev/test-cron')
   @UseGuards(AuthorizationGuard)
   async testCronJobs(
@@ -1131,8 +904,6 @@ export class BrandController {
     }
 
     try {
-      console.log(`🧪 [TEST] Manual cron job test triggered: ${type}`);
-
       switch (type) {
         case 'daily':
           await this.brandSchedulerService.handlePeriodEnd();
@@ -1158,7 +929,6 @@ export class BrandController {
         type,
       });
     } catch (error) {
-      console.error(`❌ [TEST] Cron job test failed:`, error);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,

@@ -171,16 +171,11 @@ export class AirdropContractService {
    */
   async isMerkleRootSet(): Promise<boolean> {
     try {
-      logger.log(`📞 [AIRDROP CONTRACT] Checking if merkle root is set`);
-
       const status = await this.getContractStatus();
       const zeroRoot =
         '0x0000000000000000000000000000000000000000000000000000000000000000';
       const isSet = status.merkleRoot !== zeroRoot;
 
-      logger.log(
-        `✅ [AIRDROP CONTRACT] Merkle root set: ${isSet}, root: ${status.merkleRoot}`,
-      );
       return isSet;
     } catch (error) {
       logger.error('Error checking merkle root:', error);

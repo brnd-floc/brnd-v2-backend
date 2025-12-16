@@ -759,10 +759,8 @@ export class UserService {
         this.CACHE_TTL;
 
     if (shouldRefresh) {
-      console.log('🔄 [UserService] Refreshing leaderboard cache...');
       await this.refreshLeaderboardCache();
     } else {
-      console.log('✅ [UserService] Using cached leaderboard data');
     }
   }
 
@@ -1397,7 +1395,7 @@ export class UserService {
 
           if (neynarUserInfo) {
             // Calculate score: 1.0 if has power badge, 0.8 otherwise
-            neynarScore = neynarUserInfo.power_badge ? 1.0 : 0.8;
+            neynarScore = neynarUserInfo.score;
 
             // Update user record with the calculated score
             await this.userRepository.update({ id: user.id }, { neynarScore });

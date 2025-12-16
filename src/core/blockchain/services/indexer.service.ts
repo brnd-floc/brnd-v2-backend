@@ -335,8 +335,6 @@ export class IndexerService {
       const score2 = 0.3 * vote.brndPaidWhenCreatingPodium;
       const score3 = 0.1 * vote.brndPaidWhenCreatingPodium;
 
-      console.log('THE SCORES ARE', score1, score2, score3);
-
       // Check if vote falls within current day, week and month
       const isInCurrentDay = this.isWithinCurrentDay(voteDate);
       const isInCurrentWeek = this.isWithinCurrentWeek(voteDate);

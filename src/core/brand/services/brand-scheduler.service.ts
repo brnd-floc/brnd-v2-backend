@@ -31,7 +31,7 @@ export class BrandSchedulerService {
    * Unified cron job that runs every day at midnight UTC
    * Handles day, week, and month endings with priority: Month > Week > Day
    */
-  @Cron('15 1 * * *', { timeZone: 'UTC' }) // Every day at 1:15am UTC
+  @Cron('0 0 * * *', { timeZone: 'UTC' }) // Every day at midnight UTC
   async handlePeriodEnd() {
     const now = new Date();
     console.log(

@@ -419,8 +419,6 @@ export class SignatureService {
 
     const merkleRootBytes32 = merkleRoot as `0x${string}`;
 
-    logger.log(`� [AIRDROP SIGNATURE] Signer Address: ${account.address}`);
-
     // Get airdrop contract address from config
     const config = getConfig();
     const airdropContractAddress = config.blockchain.airdropContractAddress;
@@ -442,12 +440,6 @@ export class SignatureService {
       verifyingContract: airdropContractAddress as `0x${string}`,
     } as const;
 
-    logger.log(`🔐 [AIRDROP SIGNATURE] EIP-712 domain configured:`);
-    logger.log(`   - Name: ${domain.name}`);
-    logger.log(`   - Version: ${domain.version}`);
-    logger.log(`   - Chain ID: ${domain.chainId}`);
-    logger.log(`   - Contract: ${domain.verifyingContract}`);
-
     const types = {
       AirdropClaim: [
         { name: 'fid', type: 'uint256' },
@@ -459,13 +451,6 @@ export class SignatureService {
     } as const;
 
     // Convert baseAmount to Wei (multiply by 1e18)
-
-    logger.log(`🔐 [AIRDROP SIGNATURE] Signing airdrop claim message with:`);
-    logger.log(`   - FID: ${fid}`);
-    logger.log(`   - Wallet: ${walletAddress}`);
-    logger.log(`   - BaseAmount: ${baseAmount}`);
-    logger.log(`   - BaseAmount: ${baseAmount.toString()}`);
-    logger.log(`   - Deadline: ${deadline}`);
 
     const signature = await walletClient.signTypedData({
       account,
@@ -480,10 +465,6 @@ export class SignatureService {
         deadline: BigInt(deadline),
       },
     });
-
-    logger.log(
-      `✅ [AIRDROP SIGNATURE] Airdrop claim signature generated: ${signature}`,
-    );
 
     return signature;
   }
