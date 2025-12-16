@@ -31,7 +31,7 @@ export class BrandSchedulerService {
    * Unified cron job that runs every day at midnight UTC
    * Handles day, week, and month endings with priority: Month > Week > Day
    */
-  @Cron('0 0 * * *', { timeZone: 'UTC' }) // Every day at midnight UTC
+  @Cron('0 1 * * *', { timeZone: 'UTC' }) // Every day at 1am UTC
   async handlePeriodEnd() {
     const now = new Date();
     console.log(
@@ -333,25 +333,28 @@ export class BrandSchedulerService {
       '🔔 [CRON] Admin status notification triggered at:',
       now.toISOString(),
     );
-    
+
     try {
       const title = 'SYSTEM STATUS'; // 13 chars - compliant
       const body = 'SYSTEM IS WORKING FINE BOSS'; // 27 chars - compliant
       const notificationId = `admin-status-${now.getTime()}`;
       const adminFid = 16098; // Your FID
-      
-      const result = await this.notificationService.sendNotificationToSpecificFid(
-        adminFid,
-        title,
-        body,
-        this.miniappUrl,
-        notificationId,
-      );
-      
+
+      const result =
+        await this.notificationService.sendNotificationToSpecificFid(
+          adminFid,
+          title,
+          body,
+          this.miniappUrl,
+          notificationId,
+        );
+
       if (result.sent) {
         this.logger.log(`✅ Admin status notification sent: ${result.message}`);
       } else {
-        this.logger.warn(`⚠️ Admin status notification failed: ${result.message}`);
+        this.logger.warn(
+          `⚠️ Admin status notification failed: ${result.message}`,
+        );
       }
     } catch (error) {
       errorLog(this.logger, 'ADMIN STATUS Error:', error);

@@ -662,6 +662,7 @@ export class UserService {
         },
         relations: ['brand1', 'brand2', 'brand3'],
         select: {
+          transactionHash: true,
           id: true,
           date: true,
           brand1: {

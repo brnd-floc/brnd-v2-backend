@@ -268,10 +268,6 @@ export class UserController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      console.log(
-        `🏆 [UserController] Getting leaderboard for user FID: ${session.sub}`,
-      );
-
       const validatedPage = Math.max(1, Number(page) || 1);
       const validatedLimit = Math.min(100, Math.max(10, Number(limit) || 50));
 

@@ -454,33 +454,17 @@ export class AirdropController {
       const isMerkleRootSet =
         await this.airdropContractService.isMerkleRootSet();
 
-      console.log('THE CONTRACT STATUS IS:', contractStatus);
-      console.log('THE MERKLE ROOT IS:', contractStatus.merkleRoot);
-      console.log('THE CLAIMING ENABLED IS:', contractStatus.claimingEnabled);
-      console.log('THE TOTAL CLAIMED IS:', contractStatus.totalClaimed);
-      console.log('THE ESCROW BALANCE IS:', contractStatus.escrowBalance);
-      console.log('THE ALLOWANCE IS:', contractStatus.allowance);
-
-      console.log('THE IS MERKLE ROOT SET IS:', isMerkleRootSet);
-
       // Check if user has already claimed
       const hasClaimed = await this.airdropContractService.hasClaimed(fid);
-      console.log('THE HAS CLAIMED IS:', hasClaimed);
 
       // Check if user is in snapshot
       let proofData = null;
       try {
         proofData = await this.airdropService.generateMerkleProof(fid);
         if (!proofData) {
-          console.log(
-            `⚠️ [AIRDROP] FID ${fid} not in snapshot: You must provide selection conditions in order to find a single row.`,
-          );
         }
       } catch (error) {
         // Snapshot doesn't exist or other database error
-        console.log(
-          `⚠️ [AIRDROP] Error generating merkle proof for FID ${fid}: ${error.message}`,
-        );
       }
 
       // Determine eligibility

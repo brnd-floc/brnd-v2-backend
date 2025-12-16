@@ -234,21 +234,6 @@ export class SignatureService {
     castHash: string,
     deadline: number,
   ): Promise<{ signature: string; nonce: number; canClaim: boolean }> {
-    logger.log(
-      `🔐 [SIGNATURE] ===== STARTING REWARD CLAIM SIGNATURE GENERATION =====`,
-    );
-    logger.log(`💰 [SIGNATURE] Input Parameters:`);
-    logger.log(`   - Recipient: ${recipient}`);
-    logger.log(`   - FID: ${fid}`);
-    logger.log(`   - Amount (raw): ${amount}`);
-    logger.log(`   - Amount (type): ${typeof amount}`);
-    logger.log(`   - Day: ${day}`);
-    logger.log(`   - Cast Hash: ${castHash}`);
-    logger.log(`   - Deadline: ${deadline}`);
-    logger.log(
-      `   - Deadline (readable): ${new Date(deadline * 1000).toISOString()}`,
-    );
-
     if (!process.env.PRIVATE_KEY) {
       throw new Error('PRIVATE_KEY environment variable is not set');
     }
@@ -282,9 +267,6 @@ export class SignatureService {
 
     const account = privateKeyToAccount(privateKey);
 
-    logger.log(`🔑 [SIGNATURE] Signer Address: ${account.address}`);
-    logger.log(`📝 [SIGNATURE] Contract Address: ${this.CONTRACT_ADDRESS}`);
-
     const publicClient = createPublicClient({
       chain: base,
       transport: http(),
@@ -307,10 +289,6 @@ export class SignatureService {
       args: [recipient as `0x${string}`],
     } as any);
 
-    logger.log(
-      `🔢 [SIGNATURE] Nonce from contract: ${nonce} (type: ${typeof nonce})`,
-    );
-
     const walletClient = createWalletClient({
       account,
       chain: base,
@@ -323,12 +301,6 @@ export class SignatureService {
       chainId: 8453,
       verifyingContract: this.CONTRACT_ADDRESS as `0x${string}`,
     } as const;
-
-    logger.log(`🌐 [SIGNATURE] EIP-712 Domain:`);
-    logger.log(`   - name: "${domain.name}"`);
-    logger.log(`   - version: "${domain.version}"`);
-    logger.log(`   - chainId: ${domain.chainId}`);
-    logger.log(`   - verifyingContract: ${domain.verifyingContract}`);
 
     const types = {
       RewardClaim: [
@@ -349,11 +321,7 @@ export class SignatureService {
     let amountBigInt: bigint;
     try {
       amountBigInt = BigInt(amount);
-      logger.log(`💵 [SIGNATURE] Amount conversion successful:`);
-      logger.log(`   - Input: ${amount}`);
-      logger.log(`   - BigInt: ${amountBigInt.toString()}`);
     } catch (error) {
-      logger.error(`❌ [SIGNATURE] Amount conversion failed: ${error}`);
       throw new Error(`Invalid amount format: ${amount}`);
     }
 
@@ -367,15 +335,6 @@ export class SignatureService {
       deadline: BigInt(deadline),
     };
 
-    logger.log(`📧 [SIGNATURE] Message to sign:`);
-    logger.log(`   - recipient: ${message.recipient}`);
-    logger.log(`   - amount: ${message.amount.toString()}`);
-    logger.log(`   - fid: ${message.fid.toString()}`);
-    logger.log(`   - day: ${message.day.toString()}`);
-    logger.log(`   - castHash: "${message.castHash}"`);
-    logger.log(`   - nonce: ${message.nonce.toString()}`);
-    logger.log(`   - deadline: ${message.deadline.toString()}`);
-
     const signature = await walletClient.signTypedData({
       account,
       domain,
@@ -383,10 +342,6 @@ export class SignatureService {
       primaryType: 'RewardClaim',
       message,
     });
-
-    logger.log(`✅ [SIGNATURE] Signature generated successfully: ${signature}`);
-    logger.log(`✅ [SIGNATURE] Signature length: ${signature.length}`);
-    logger.log(`🔐 [SIGNATURE] ===== SIGNATURE GENERATION COMPLETE =====`);
 
     // After generating the signature, verify it:
     const isValid = await verifyTypedData({
@@ -397,14 +352,6 @@ export class SignatureService {
       message,
       signature,
     });
-
-    logger.log(
-      `🔍 [SIGNATURE] Local verification: ${isValid ? '✅ VALID' : '❌ INVALID'}`,
-    );
-    logger.log(`🔍 [SIGNATURE] Expected signer: ${account.address}`);
-    logger.log(
-      `🔍 [SIGNATURE] Backend signer env: ${process.env.BACKEND_SIGNER_ADDRESS || 'NOT SET'}`,
-    );
 
     return {
       signature,

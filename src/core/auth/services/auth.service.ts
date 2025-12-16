@@ -33,7 +33,6 @@ export class AuthService implements OnModuleInit {
       const module = await importFn('@farcaster/quick-auth');
       const { createClient } = module;
       this.farcasterClient = createClient();
-      logger.log('Farcaster QuickAuth client initialized');
     } catch (error) {
       logger.error('Failed to initialize Farcaster QuickAuth client:', error);
       throw new Error('QuickAuth initialization failed: ' + error.message);
@@ -66,11 +65,8 @@ export class AuthService implements OnModuleInit {
     await this.ensureFarcasterClient();
 
     try {
-      logger.log('Verifying QuickAuth token:', token);
       const domain = 'brnd.land';
-      logger.log('Domain:', domain);
       const payload = await this.farcasterClient.verifyJwt({ token, domain });
-      logger.log('Payload:', payload);
 
       if (!payload || !payload.sub) {
         throw new Error('Invalid token payload: missing user FID');
@@ -78,11 +74,9 @@ export class AuthService implements OnModuleInit {
 
       return payload;
     } catch (error) {
-      logger.error('QuickAuth token verification failed once:', error.message);
       try {
         const domain = 'miniapp.anky.app';
         const payload = await this.farcasterClient.verifyJwt({ token, domain });
-        logger.log('Payload:', payload);
 
         if (!payload || !payload.sub) {
           throw new Error('Invalid token payload: missing user FID');
