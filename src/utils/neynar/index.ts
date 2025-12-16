@@ -41,32 +41,18 @@ export default class NeynarService {
       try {
         // Wait 1 second between attempts, except for first attempt
         if (attempts > 0) {
-          console.log(
-            `⏳ [NeynarService] Waiting 1 second before retry ${attempts}/${maxRetries}...`,
-          );
           await new Promise((resolve) =>
             setTimeout(resolve, 1000 + attempts * 1000),
           );
         }
 
-        console.log(
-          `🔍 [NeynarService] Attempt ${attempts + 1}/${maxRetries} - Fetching cast: ${castHash}`,
-        );
         const response = await this.client.lookupCastByHashOrWarpcastUrl({
           identifier: castHash,
           type: 'hash',
         });
-        console.log(
-          `✅ [NeynarService] Successfully fetched cast on attempt ${attempts + 1}`,
-          response.cast,
-        );
         return response.cast;
       } catch (error) {
         attempts++;
-        console.log(
-          `❌ [NeynarService] Attempt ${attempts}/${maxRetries} failed:`,
-          error.message,
-        );
 
         // Check for 404 errors (cast not found)
         const isNotFound =
@@ -76,14 +62,10 @@ export default class NeynarService {
 
         // If cast not found and we haven't exhausted retries, continue to next attempt
         if (isNotFound && attempts < maxRetries) {
-          console.log(
-            `🔄 [NeynarService] Cast not found, retrying... (${attempts}/${maxRetries})`,
-          );
           continue;
         }
 
         // If we've exhausted retries or hit a different error, throw
-        console.error('❌ [NeynarService] Final error fetching cast:', error);
         throw error;
       }
     }
@@ -130,7 +112,7 @@ export default class NeynarService {
         });
       }
     } catch (e) {
-      console.log(e);
+      // Error handling
     }
 
     return response;
@@ -140,52 +122,41 @@ export default class NeynarService {
     profile: string,
   ): Promise<CastResponse[]> => {
     const response: CastResponse[] = [];
-    console.log('Getting trending casts for profile:', profile);
 
     try {
       const searchResult = await this.client.searchUser({
         q: profile.slice(1),
       });
-      console.log('Search result:', searchResult);
       const users = searchResult.result.users;
-      console.log('Found users:', users);
 
       let selectedProfile: SearchedUser = undefined;
       for (let i = 0; i < users.length; i++) {
         const user = users[i];
         if (user.username === profile.slice(1)) {
           selectedProfile = user;
-          console.log('Found matching profile:', selectedProfile);
         }
       }
 
       if (selectedProfile !== undefined) {
-        console.log('Fetching casts for FID:', selectedProfile.fid);
         const result = await this.client.fetchCastsForUser({
           fid: selectedProfile.fid,
           limit: 5,
         });
-        console.log('Fetch result:', result);
 
         const casts = result.casts;
-        console.log('Found casts:', casts);
 
         for (const cast of casts) {
-          console.log('Processing cast:', cast);
           const author = cast.author as User;
           let image = '';
 
           if (cast.embeds.length > 0) {
-            console.log('Cast has embeds:', cast.embeds);
             const embed = cast.embeds[0];
             if (embed) {
               const metadata = embed['metadata'];
               if (metadata) {
                 const contentType = metadata['content_type'];
-                console.log('Embed content type:', contentType);
                 if (contentType && contentType.includes('image/')) {
                   image = embed['url'];
-                  console.log('Found image URL:', image);
                 }
               }
             }
@@ -200,17 +171,13 @@ export default class NeynarService {
             warpcastUrl: `https://farcaster.xyz/${author.username}/${cast.hash.slice(0, 10)}`,
             hash: cast.hash,
           };
-          console.log('Adding cast response:', castResponse);
           response.push(castResponse);
         }
-      } else {
-        console.log('No matching profile found');
       }
     } catch (e) {
-      console.log('Error in getTrendingCastInAProfile:', e);
+      // Error handling
     }
 
-    console.log('Returning response:', response);
     return response;
   };
 
@@ -227,7 +194,6 @@ export default class NeynarService {
       const channelInfo = await this.client.lookupChannel({ id: channelId });
       return channelInfo.channel.follower_count || 0;
     } catch (error) {
-      console.error('Error fetching channel follower count:', error);
       throw error;
     }
   };
@@ -249,7 +215,6 @@ export default class NeynarService {
 
       return 0;
     } catch (error) {
-      console.error('Error fetching profile follower count:', error);
       throw error;
     }
   };

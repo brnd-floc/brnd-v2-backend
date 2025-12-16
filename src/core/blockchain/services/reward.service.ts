@@ -137,12 +137,10 @@ export class RewardService {
         `💰 [REWARD] Generating claim signature for FID: ${fid}, Day: ${day}`,
       );
 
-      console.log('Validating reward eligibility');
       const eligibility = await this.validateRewardEligibility(fid, day);
       if (!eligibility.eligible) {
         throw new Error(`Cannot claim reward: ${eligibility.reason}`);
       }
-      console.log('Reward eligibility validated');
       // Find the vote for this day to get the reward amount
       const vote = await this.userBrandVotesRepository.findOne({
         where: { user: { fid }, day },

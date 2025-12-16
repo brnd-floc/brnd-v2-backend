@@ -248,117 +248,6 @@ export class BrandController {
     });
   }
 
-  // /**
-  //  * Records votes for multiple brands.
-  //  *
-  //  * @param {CurrentUser} user - The current user session.
-  //  * @param {{ ids: string[] }} ids - An object containing an array of brand IDs to vote for.
-  //  * @param {Response} res - The response object.
-  //  * @returns {Promise<Response>} A response object indicating the result of the vote operation.
-  //  */
-  // @Post('/vote')
-  // @UseGuards(AuthorizationGuard)
-  // async voteBrands(
-  //   @Session() user: QuickAuthPayload, // Get FID from QuickAuth token
-  //   @Body() { ids }: { ids: number[] },
-  //   @Res() res: Response,
-  // ): Promise<Response> {
-  //   console.log(
-  //     '🗳️ [VoteBrands] User FID:',
-  //     user.sub,
-  //     'attempting to vote with IDs:',
-  //     ids.join(', '),
-  //   );
-
-  //   try {
-  //     // Validate request body
-  //     if (!ids || !Array.isArray(ids)) {
-  //       return hasError(
-  //         res,
-  //         HttpStatus.BAD_REQUEST,
-  //         'voteBrands',
-  //         'Invalid request: ids must be an array',
-  //       );
-  //     }
-
-  //     if (ids.length !== 3) {
-  //       return hasError(
-  //         res,
-  //         HttpStatus.BAD_REQUEST,
-  //         'voteBrands',
-  //         'Invalid request: must provide exactly 3 brand IDs',
-  //       );
-  //     }
-
-  //     // Check for duplicate IDs
-  //     const uniqueIds = new Set(ids);
-  //     if (uniqueIds.size !== 3) {
-  //       return hasError(
-  //         res,
-  //         HttpStatus.BAD_REQUEST,
-  //         'voteBrands',
-  //         'Invalid request: all brand IDs must be different',
-  //       );
-  //     }
-
-  //     console.log(
-  //       '✅ [VoteBrands] Vote validation passed, submitting votes...',
-  //     );
-
-  //     // Use user.sub (FID) - the brandService will find the user in the database
-  //     const votes = await this.brandService.voteForBrands(user.sub, ids);
-
-  //     return hasResponse(res, {
-  //       transactionHash: votes.transactionHash,
-  //       date: votes.date,
-  //       brand1: {
-  //         id: votes.brand1.id,
-  //         name: votes.brand1.name,
-  //         imageUrl: votes.brand1.imageUrl,
-  //       },
-  //       brand2: {
-  //         id: votes.brand2.id,
-  //         name: votes.brand2.name,
-  //         imageUrl: votes.brand2.imageUrl,
-  //       },
-  //       brand3: {
-  //         id: votes.brand3.id,
-  //         name: votes.brand3.name,
-  //         imageUrl: votes.brand3.imageUrl,
-  //       },
-  //       message: 'Vote submitted successfully',
-  //       bot_cast_hash: votes.bot_cast_hash,
-  //     });
-  //   } catch (error) {
-  //     console.error('❌ [VoteBrands] Voting error:', error);
-
-  //     // Handle specific error types
-  //     if (error.message.includes('already voted')) {
-  //       return hasError(res, HttpStatus.CONFLICT, 'voteBrands', error.message);
-  //     }
-
-  //     if (error.message.includes('not found')) {
-  //       return hasError(res, HttpStatus.NOT_FOUND, 'voteBrands', error.message);
-  //     }
-
-  //     if (error.message.includes('do not exist')) {
-  //       return hasError(
-  //         res,
-  //         HttpStatus.BAD_REQUEST,
-  //         'voteBrands',
-  //         error.message,
-  //       );
-  //     }
-
-  //     return hasError(
-  //       res,
-  //       HttpStatus.INTERNAL_SERVER_ERROR,
-  //       'voteBrands',
-  //       'An unexpected error occurred while processing your vote',
-  //     );
-  //   }
-  // }
-
   /**
    * Verifies a shared cast and awards points for valid shares.
    *
@@ -393,10 +282,6 @@ export class BrandController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      console.log(
-        `🔍 [VerifyShare] User FID: ${user.sub}, Cast: ${castHash}, Vote: ${voteId}`,
-      );
-
       // Validate input
       if (!voteId) {
         return hasError(
@@ -578,15 +463,6 @@ export class BrandController {
               recipientAddress,
               castHash,
             );
-            console.log('✅ [VerifyShare] Claim signature generated:', {
-              signature: claimSignature.signature?.substring(0, 20) + '...',
-              amount: claimSignature.amount,
-              amountType: typeof claimSignature.amount,
-              amountLength: claimSignature.amount.length,
-              deadline: claimSignature.deadline,
-              nonce: claimSignature.nonce,
-              canClaim: claimSignature.canClaim,
-            });
           } catch (claimError) {
             console.error(
               '❌ [VerifyShare] Failed to generate claim signature:',
@@ -616,60 +492,26 @@ export class BrandController {
             : 'Provide recipientAddress to generate claim signature.',
         };
 
-        console.log('📤 [VerifyShare] Response payload:', {
-          ...responsePayload,
-          claimSignature: responsePayload.claimSignature
-            ? {
-                ...responsePayload.claimSignature,
-                signature:
-                  responsePayload.claimSignature.signature.substring(0, 20) +
-                  '...',
-                amount: responsePayload.claimSignature.amount,
-                amountType: typeof responsePayload.claimSignature.amount,
-                amountLength: String(responsePayload.claimSignature.amount)
-                  .length,
-              }
-            : null,
-        });
-
         // Reply to the cast telling the user their share was verified
         try {
           const pointsForVote = 6 + updatedUser.brndPowerLevel * 3;
           const config = getConfig();
           if (config.neynar.apiKey && config.neynar.signerUuid) {
-            const replyResponse = await fetch(
-              'https://api.neynar.com/v2/farcaster/cast',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-api-key': config.neynar.apiKey,
-                },
-                body: JSON.stringify({
-                  signer_uuid: config.neynar.signerUuid,
-                  embeds: [
-                    { cast_id: { hash: castHash, fid: castData.author.fid } },
-                  ],
-
-                  text: `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`,
-                }),
+            await fetch('https://api.neynar.com/v2/farcaster/cast', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.neynar.apiKey,
               },
-            );
+              body: JSON.stringify({
+                signer_uuid: config.neynar.signerUuid,
+                embeds: [
+                  { cast_id: { hash: castHash, fid: castData.author.fid } },
+                ],
 
-            if (replyResponse.ok) {
-              const replyData = await replyResponse.json();
-              console.log(
-                '✅ [VerifyShare] Successfully replied to cast:',
-                replyData.cast?.hash,
-              );
-            } else {
-              const errorText = await replyResponse.text();
-              console.error(
-                '❌ [VerifyShare] Failed to reply to cast:',
-                replyResponse.status,
-                errorText,
-              );
-            }
+                text: `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`,
+              }),
+            });
           } else {
             console.warn(
               '⚠️ [VerifyShare] Neynar config missing, skipping cast reply',
