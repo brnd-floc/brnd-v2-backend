@@ -296,9 +296,6 @@ export class BrandController {
       const isClaimRetrieval = !castHash || castHash.trim() === '';
 
       if (isClaimRetrieval) {
-        console.log(
-          '🔄 [VerifyShare] Handling claim retrieval for already shared vote',
-        );
         return await this.handleClaimRetrieval(
           user,
           voteId,
@@ -326,7 +323,6 @@ export class BrandController {
           'Invalid cast hash format',
         );
       }
-      console.log('CAST HASH', castHash);
 
       // Get the user from database
       const dbUser = await this.userService.getByFid(user.sub);
@@ -339,14 +335,11 @@ export class BrandController {
         );
       }
 
-      console.log('DB USER', dbUser);
-
       // Get the vote and check if it belongs to the user
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
 
-      console.log('VOTE', vote);
       if (!vote) {
         return hasError(
           res,
@@ -442,20 +435,16 @@ export class BrandController {
         const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
         const day = Math.floor(voteTimestamp / 86400);
 
-        console.log('Before verifying share for reward');
-
         // Mark share as verified for reward claim
         await this.rewardService.verifyShareForReward(
           dbUser.fid,
           day,
           castHash,
         );
-        console.log('After verifying share for reward');
 
         // If recipient address is provided, generate the claim signature
         let claimSignature = null;
         if (recipientAddress) {
-          console.log('Generating claim signature');
           try {
             claimSignature = await this.rewardService.generateClaimSignature(
               dbUser.fid,

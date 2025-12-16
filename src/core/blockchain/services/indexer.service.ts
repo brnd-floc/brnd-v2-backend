@@ -163,25 +163,9 @@ export class IndexerService {
       const timestamp = parseInt(voteData.timestamp);
       const voteDate = new Date(timestamp * 1000); // Convert Unix timestamp to Date
 
-      logger.log(`🗳️ [INDEXER] Vote details:`, {
-        id: voteData.id,
-        voter: voteData.voter,
-        fid: voteData.fid,
-        day: dayNumber,
-        brandIds: voteData.brandIds,
-        cost: voteData.cost,
-        blockNumber,
-        transactionHash: voteData.transactionHash,
-        date: voteDate.toISOString(),
-      });
-
       // Find or create user by FID
       let user = await this.userService.getByFid(voteData.fid);
       if (!user) {
-        logger.log(
-          `👤 [INDEXER] User with FID ${voteData.fid} not found, fetching from Neynar`,
-        );
-
         // Fetch user info from Neynar API
         const neynarUserInfo = await this.getNeynarUserInfo(voteData.fid);
 
@@ -215,9 +199,6 @@ export class IndexerService {
           createdAt: voteDate,
           updatedAt: voteDate,
         });
-        logger.log(
-          `✅ [INDEXER] Created user from Neynar data: ${user.id} (username: ${username})`,
-        );
       }
 
       // Verify brands exist
@@ -233,9 +214,6 @@ export class IndexerService {
         if (!brand2) missingBrands.push(voteData.brandIds[1]);
         if (!brand3) missingBrands.push(voteData.brandIds[2]);
 
-        logger.error(
-          `❌ [INDEXER] Missing brands: ${missingBrands.join(', ')}`,
-        );
         throw new Error(`Brands not found: ${missingBrands.join(', ')}`);
       }
 

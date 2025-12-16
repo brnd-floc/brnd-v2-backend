@@ -19,9 +19,6 @@ export const Session = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): QuickAuthPayload => {
     const request = ctx.switchToHttp().getRequest();
 
-    console.log('🔍 [Session Decorator] User object:', request.user);
-    console.log('🔍 [Session Decorator] User FID (sub):', request.user?.sub);
-
     if (!request.user) {
       throw new Error('No authenticated user found in request');
     }

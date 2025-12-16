@@ -31,7 +31,7 @@ export class BrandSchedulerService {
    * Unified cron job that runs every day at midnight UTC
    * Handles day, week, and month endings with priority: Month > Week > Day
    */
-  @Cron('0 1 * * *', { timeZone: 'UTC' }) // Every day at 1am UTC
+  @Cron('15 1 * * *', { timeZone: 'UTC' }) // Every day at 1:15am UTC
   async handlePeriodEnd() {
     const now = new Date();
     console.log(
@@ -141,13 +141,14 @@ export class BrandSchedulerService {
    * Reset daily scores
    */
   private async resetDailyScores(): Promise<void> {
-    const updateResult = await this.brandRepository.update(
-      {},
-      {
+    const updateResult = await this.brandRepository
+      .createQueryBuilder()
+      .update(Brand)
+      .set({
         scoreDay: 0,
         stateScoreDay: 0,
-      },
-    );
+      })
+      .execute();
     this.logger.log(
       `✅ Reset daily scores for ${updateResult.affected} brands`,
     );
@@ -157,14 +158,15 @@ export class BrandSchedulerService {
    * Reset weekly scores
    */
   private async resetWeeklyScores(): Promise<void> {
-    const updateResult = await this.brandRepository.update(
-      {},
-      {
+    const updateResult = await this.brandRepository
+      .createQueryBuilder()
+      .update(Brand)
+      .set({
         scoreWeek: 0,
         stateScoreWeek: 0,
         rankingWeek: 0,
-      },
-    );
+      })
+      .execute();
     this.logger.log(
       `✅ Reset weekly scores for ${updateResult.affected} brands`,
     );
@@ -174,14 +176,15 @@ export class BrandSchedulerService {
    * Reset monthly scores
    */
   private async resetMonthlyScores(): Promise<void> {
-    const updateResult = await this.brandRepository.update(
-      {},
-      {
+    const updateResult = await this.brandRepository
+      .createQueryBuilder()
+      .update(Brand)
+      .set({
         scoreMonth: 0,
         stateScoreMonth: 0,
         rankingMonth: 0,
-      },
-    );
+      })
+      .execute();
     this.logger.log(
       `✅ Reset monthly scores for ${updateResult.affected} brands`,
     );
