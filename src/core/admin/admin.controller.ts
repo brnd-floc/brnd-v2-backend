@@ -16,13 +16,18 @@ import { Response } from 'express';
 import { AdminService } from './services/admin.service';
 import { ContractUploadService } from '../blockchain/services/contract-upload.service';
 import { AirdropService } from '../airdrop/services/airdrop.service';
+import { PodiumService } from '../embeds/services/podium.service';
 import {
   CreateBrandDto,
   UpdateBrandDto,
   PrepareMetadataDto,
   BlockchainBrandDto,
 } from './dto';
-import { AuthorizationGuard, QuickAuthPayload } from '../../security/guards';
+import {
+  AdminGuard,
+  AuthorizationGuard,
+  QuickAuthPayload,
+} from '../../security/guards';
 import { Session } from '../../security/decorators';
 import { HttpStatus, hasError, hasResponse } from '../../utils';
 import { logger } from '../../main';
@@ -40,6 +45,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly contractUploadService: ContractUploadService,
     private readonly airdropService: AirdropService,
+    private readonly podiumService: PodiumService,
   ) {
     console.log('AdminController initialized');
   }
@@ -1423,6 +1429,33 @@ export class AdminController {
         HttpStatus.INTERNAL_SERVER_ERROR,
         'testSingleBrandUpload',
         `Test failed: ${error.message}`,
+      );
+    }
+  }
+
+  @Get('podiums/generate-sample-image')
+  @UseGuards(AdminGuard)
+  async generateSampleImage(@Res() res: Response) {
+    logger.log(`generateSampleImage called - testing mode (no auth)`);
+
+    try {
+      const result = await this.podiumService.generateSamplePodiumImage();
+
+      logger.log(
+        `Podium image generated successfully: ${result.cloudinaryUrl}`,
+      );
+
+      // Return the image as PNG
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(result.buffer);
+    } catch (error) {
+      logger.error('Error generating sample podium image:', error);
+      return hasError(
+        res,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'generateSampleImage',
+        error.message,
       );
     }
   }

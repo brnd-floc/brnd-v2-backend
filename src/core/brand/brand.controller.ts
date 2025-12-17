@@ -333,6 +333,7 @@ export class BrandController {
           'https://brnd.land',
           'https://rebrnd.lat',
           'https://www.brnd.land',
+          'https://poiesis.anky.app',
         ];
 
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {
@@ -356,7 +357,8 @@ export class BrandController {
         const correctEmbed = castData.embeds[correctEmbedIndex] as any;
         const correctEmbedUrl = correctEmbed.url;
         const transactionHashFromQueryParam =
-          correctEmbedUrl.split('?txHash=')[1];
+          correctEmbedUrl.split('/podium/')[1];
+
         if (vote.transactionHash !== transactionHashFromQueryParam) {
           return hasError(
             res,

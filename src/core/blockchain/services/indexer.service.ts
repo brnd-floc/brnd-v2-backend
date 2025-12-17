@@ -13,6 +13,7 @@ import {
   SubmitRewardClaimDto,
   UpdateUserLevelDto,
 } from '../dto';
+import { PodiumService } from 'src/core/embeds/services/podium.service';
 
 @Injectable()
 export class IndexerService {
@@ -25,6 +26,7 @@ export class IndexerService {
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
     private readonly userService: UserService,
     private readonly brandService: BrandService,
+    private readonly podiumService: PodiumService,
   ) {}
 
   /**
@@ -446,8 +448,18 @@ export class IndexerService {
       // Formula: (level + 1) * 3
       const leaderboardPoints = (user.brndPowerLevel + 1) * 3;
       await this.userService.addPoints(user.id, leaderboardPoints);
+      let cloudinaryUrl: string | null = null;
+      try {
+        cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
+          voteData.transactionHash,
+        );
+      } catch (error) {
+        logger.error(`❌ [INDEXER] Error generating podium image:`, error);
+      }
 
-      logger.log(`✅ [INDEXER] Vote processing completed: ${voteData.id}`);
+      logger.log(
+        `✅ [INDEXER] Vote processing completed: ${voteData.id}, the cloudinary url is ${cloudinaryUrl}`,
+      );
     } catch (error) {
       logger.error(`❌ [INDEXER] Error processing vote ${voteData.id}:`, error);
       throw error;

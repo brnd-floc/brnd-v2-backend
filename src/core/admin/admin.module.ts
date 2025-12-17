@@ -15,6 +15,7 @@ import { Brand, Category } from '../../models';
 import { AuthModule } from '../auth/auth.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { AirdropModule } from '../airdrop/airdrop.module';
+import { EmbedsModule } from '../embeds/embeds.module';
 import { IpfsService } from '../../utils/ipfs.service';
 
 @Module({
@@ -23,6 +24,7 @@ import { IpfsService } from '../../utils/ipfs.service';
     AuthModule,
     BlockchainModule,
     AirdropModule,
+    EmbedsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, IpfsService],

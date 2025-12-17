@@ -14,6 +14,7 @@ import { BrandService } from '../brand/services';
 import { AdminService } from '../admin/services/admin.service';
 import { IpfsService } from '../../utils/ipfs.service';
 import { AuthModule } from '../auth/auth.module';
+import { EmbedsModule } from '../embeds/embeds.module';
 
 import {
   User,
@@ -37,6 +38,7 @@ import {
       AirdropScore,
     ]),
     forwardRef(() => AuthModule),
+    EmbedsModule,
   ],
   controllers: [BlockchainController],
   providers: [

@@ -1154,16 +1154,10 @@ export class AirdropService {
             multiplier: 1.2,
             achieved: proUserResult.isProUser,
           },
-          {
-            requirement: 2,
-            multiplier: 1.4,
-            achieved: proUserResult.isProUser,
-          },
         ],
         details: {
           isProUser: proUserResult.isProUser,
-          nextTier: proUserResult.isProUser,
-          summary: `Pro User: ${proUserResult.isProUser ? 'Yes' : 'No'}`,
+          summary: `Pro User: ${proUserResult.isProUser}`,
         },
       },
     ];

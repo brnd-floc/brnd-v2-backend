@@ -12,6 +12,7 @@ import { EmbedData } from './embeds.types';
 export class EmbedsService {
   private readonly logger = new Logger(EmbedsService.name);
   private readonly config = getConfig();
+  private readonly fallbackImageUrl = 'https://brnd.land/image.png';
 
   constructor(
     @InjectRepository(UserBrandVotes)
@@ -23,6 +24,69 @@ export class EmbedsService {
     @InjectRepository(Brand)
     private readonly brandRepository: Repository<Brand>,
   ) {}
+
+  async generatePodiumEmbedByTransactionHash(
+    transactionHash: string,
+  ): Promise<string | null> {
+    try {
+      const vote = await this.votesRepository.findOne({
+        where: { transactionHash: transactionHash },
+        relations: ['user', 'brand1', 'brand2', 'brand3'],
+      });
+      if (!vote) {
+        this.logger.warn(`Vote not found: ${transactionHash}`);
+        return null;
+      }
+
+      const primaryImageUrl =
+        vote.podiumImageUrl ||
+        `https://res.cloudinary.com/dkjfbaniw/image/upload/podiums/${transactionHash}.png`;
+      const imageUrl = await this.ensureImageUrl(primaryImageUrl);
+
+      const embedData: EmbedData = {
+        title: `BRND`,
+        description: `${vote.user.username}'s BRND Podium`,
+        imageUrl,
+        targetUrl: `https://brnd.land`,
+      };
+      return this.generateEmbedHtml(embedData, 'podium');
+    } catch (error) {
+      this.logger.error(
+        `Error generating podium embed for ${transactionHash}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  private async ensureImageUrl(url: string): Promise<string> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.startsWith('image/')) {
+          return url;
+        }
+      } else {
+        this.logger.warn(
+          `Image check failed with status ${res.status} for ${url}`,
+        );
+      }
+    } catch (error) {
+      clearTimeout(timeout);
+      this.logger.warn(`Image check failed for ${url}`, error);
+    }
+
+    return this.fallbackImageUrl;
+  }
 
   /**
    * Generate dynamic embed HTML for podium sharing
@@ -230,18 +294,21 @@ export class EmbedsService {
   /**
    * Generate the actual HTML with Farcaster frame metadata
    */
-  private generateEmbedHtml(embedData: EmbedData, type: string): string {
+  private generateEmbedHtml(
+    embedData: EmbedData,
+    type: string,
+    title: string = 'BRND',
+  ): string {
     const frameData = JSON.stringify({
       version: 'next',
       imageUrl: embedData.imageUrl,
       button: {
-        title: 'Open BRND',
+        title: title,
         action: {
           type: 'launch_frame',
           url: embedData.targetUrl,
           name: 'BRND',
-          splashImageUrl:
-            'https://github.com/jpfraneto/images/blob/main/brndsplash.png?raw=true',
+          splashImageUrl: 'https://brnd.land/splash.png',
           splashBackgroundColor: '#000000',
         },
       },

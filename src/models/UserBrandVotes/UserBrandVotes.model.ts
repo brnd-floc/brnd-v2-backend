@@ -63,4 +63,7 @@ export class UserBrandVotes {
 
   @Column({ nullable: true, length: 66 })
   claimTxHash: string;
+
+  @Column({ nullable: true, length: 66 })
+  podiumImageUrl: string;
 }
