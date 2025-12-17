@@ -299,9 +299,13 @@ export class EmbedsService {
     type: string,
     title: string = 'BRND',
   ): string {
+    const timestamp = Date.now();
+    // Ensure we handle existing query params in the imageUrl
+    const dynamicImageUrl = `${embedData.imageUrl}${embedData.imageUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+
     const frameData = JSON.stringify({
-      version: 'next',
-      imageUrl: embedData.imageUrl,
+      version: '1', // Corrected version
+      imageUrl: dynamicImageUrl, // Using the cache-busted URL
       button: {
         title: title,
         action: {
@@ -320,31 +324,26 @@ export class EmbedsService {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- Farcaster Frame Metadata -->
-    <meta name="" content='${frameData}'/>
+    <meta name="fc:miniapp" content='${frameData}'/>
     <meta name="fc:frame" content='${frameData}'/>
     
-    <!-- Basic Meta Tags -->
     <title>${embedData.title}</title>
     <meta name="description" content="${embedData.description}">
     
-    <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="${embedData.title}">
     <meta property="og:description" content="${embedData.description}">
-    <meta property="og:image" content="${embedData.imageUrl}">
+    <meta property="og:image" content="${dynamicImageUrl}">
     <meta property="og:url" content="${embedData.targetUrl}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BRND">
     
-    <!-- Twitter Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${embedData.title}">
     <meta name="twitter:description" content="${embedData.description}">
-    <meta name="twitter:image" content="${embedData.imageUrl}">
+    <meta name="twitter:image" content="${dynamicImageUrl}">
     <meta property="twitter:domain" content="brnd.land">
     <meta property="twitter:url" content="${embedData.targetUrl}">
     
-    <!-- Additional Meta Tags -->
     <meta name="author" content="BRND Team">
     <meta name="keywords" content="BRND, Farcaster, brands, voting, leaderboard, ${type}">
 </head>
