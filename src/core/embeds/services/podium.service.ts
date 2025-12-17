@@ -189,6 +189,7 @@ export class PodiumService implements OnModuleInit {
         imageBuffer,
         transactionHash,
       );
+      console.log('THE CLOUDINARY URL IS', cloudinaryUrl);
 
       await this.userBrandVotesRepository.update(
         { transactionHash },

@@ -47,7 +47,7 @@ import {
         RewardClaim,
       ],
       // Important: Set synchronize to false in production for safety
-      synchronize: true, // Enabled to automatically sync schema changes
+      synchronize: false, // Enabled to automatically sync schema changes
       //synchronize: !getConfig().isProduction,
       logging: false,
       timezone: 'Z',
