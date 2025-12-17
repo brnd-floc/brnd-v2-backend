@@ -288,6 +288,7 @@ export class BrandController {
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
+      logger.log('THE VOTE IS', vote);
 
       if (!vote) {
         return hasError(
