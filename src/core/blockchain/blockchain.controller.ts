@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
 import { BlockchainService } from './services/blockchain.service';
@@ -70,6 +78,8 @@ export class BlockchainController {
           walletAddress,
           deadline,
         );
+
+      Logger.log('THE AUTH DATA IS', authData, walletAddress, session.sub);
 
       return {
         authData,

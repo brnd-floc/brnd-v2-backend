@@ -184,7 +184,9 @@ export class PodiumService implements OnModuleInit {
       if (!vote) throw new Error(`Vote not found: ${transactionHash}`);
 
       const podiumData = this.voteToPodiumData(vote);
+      console.log('THE PODIUM DATA IS', podiumData);
       const imageBuffer = await this.generatePodiumImage(podiumData);
+
       const cloudinaryUrl = await this.uploadToCloudinary(
         imageBuffer,
         transactionHash,
@@ -307,6 +309,7 @@ export class PodiumService implements OnModuleInit {
    * => no inset transparent margin can appear in browsers/cloudinary/chat previews
    */
   async generatePodiumImage(data: PodiumData): Promise<Buffer> {
+    console.log('GENERATING PODIUM IMAGE');
     try {
       const { image: baseImage, width, height } = await this.getBaseLayer();
       if (!this.baseCrop) throw new Error('Base crop not computed');

@@ -26,7 +26,6 @@ export class EmbedsController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      console.log('getting podium by transaction hash', transactionHash);
       const embedHtml =
         await this.embedsService.generatePodiumEmbedByTransactionHash(
           transactionHash,
