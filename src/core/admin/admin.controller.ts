@@ -377,6 +377,34 @@ export class AdminController {
     }
   }
 
+  // @Get('recalculate-score-day/20440')
+  // async recalculateScoreDayFor20440(@Res() res: Response) {
+  //   console.log(`recalculateScoreDayFor20440 called`);
+
+  //   try {
+  //     const result = await this.adminService.recalculateScoreDayForDay(20440);
+  //     console.log('ScoreDay recalculation result:', result);
+
+  //     return hasResponse(res, {
+  //       success: true,
+  //       message: result.message,
+  //       data: {
+  //         day: 20440,
+  //         updatedBrands: result.updatedBrands,
+  //         processedVotes: result.processedVotes,
+  //       },
+  //     });
+  //   } catch (error) {
+  //     console.error('Error in recalculateScoreDayFor20440:', error);
+  //     return hasError(
+  //       res,
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //       'recalculateScoreDayFor20440',
+  //       error.message,
+  //     );
+  //   }
+  // }
+
   /**
    * Bulk operations endpoint for advanced admin tasks
    */

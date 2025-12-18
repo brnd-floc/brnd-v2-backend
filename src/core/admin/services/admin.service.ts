@@ -24,6 +24,8 @@ export class AdminService {
     private readonly brandRepository: Repository<Brand>,
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(UserBrandVotes)
+    private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
     private readonly ipfsService: IpfsService,
     private readonly blockchainService: BlockchainService,
   ) {
@@ -101,6 +103,82 @@ export class AdminService {
 
     // Return the start of current cycle (most recent Saturday 00:00:00 UTC)
     return new Date(cycleStart.getTime() + (cycleNumber - 1) * msPerWeek);
+  }
+
+  async recalculateScoreDayForDay(day: number): Promise<{ message: string; updatedBrands: number; processedVotes: number }> {
+    console.log(`🔄 Recalculating scoreDay for day ${day}...`);
+
+    try {
+      // Reset all scoreDay values to 0
+      console.log('📊 Resetting all scoreDay values to 0...');
+      const resetResult = await this.brandRepository.query(
+        'UPDATE brands SET scoreDay = 0'
+      );
+      console.log(`✅ Reset scoreDay for all brands`);
+
+      // Get all votes for the specified day
+      console.log(`📊 Fetching votes for day ${day}...`);
+      const votes = await this.userBrandVotesRepository.find({
+        where: { day },
+        relations: ['brand1', 'brand2', 'brand3']
+      });
+      
+      console.log(`📊 Found ${votes.length} votes for day ${day}`);
+
+      let processedVotes = 0;
+      const brandScores = new Map<number, number>();
+
+      // Process each vote and accumulate scores
+      for (const vote of votes) {
+        if (vote.brndPaidWhenCreatingPodium && vote.brndPaidWhenCreatingPodium > 0) {
+          const baseAmount = vote.brndPaidWhenCreatingPodium;
+          
+          // 60% to brand1
+          if (vote.brand1?.id) {
+            const currentScore = brandScores.get(vote.brand1.id) || 0;
+            brandScores.set(vote.brand1.id, currentScore + (baseAmount * 0.6));
+          }
+          
+          // 30% to brand2
+          if (vote.brand2?.id) {
+            const currentScore = brandScores.get(vote.brand2.id) || 0;
+            brandScores.set(vote.brand2.id, currentScore + (baseAmount * 0.3));
+          }
+          
+          // 10% to brand3
+          if (vote.brand3?.id) {
+            const currentScore = brandScores.get(vote.brand3.id) || 0;
+            brandScores.set(vote.brand3.id, currentScore + (baseAmount * 0.1));
+          }
+          
+          processedVotes++;
+        }
+      }
+
+      console.log(`📊 Processed ${processedVotes} votes with brndPaidWhenCreatingPodium values`);
+      console.log(`📊 Updating scores for ${brandScores.size} brands...`);
+
+      // Update scoreDay for each brand
+      let updatedBrands = 0;
+      for (const [brandId, score] of brandScores.entries()) {
+        await this.brandRepository.update(
+          { id: brandId },
+          { scoreDay: Math.round(score) }
+        );
+        updatedBrands++;
+      }
+
+      console.log('✅ ScoreDay recalculation completed successfully');
+
+      return {
+        message: `ScoreDay recalculated successfully for day ${day}`,
+        updatedBrands,
+        processedVotes
+      };
+    } catch (error) {
+      console.error('❌ Failed to recalculate scoreDay:', error);
+      throw new Error(`Failed to recalculate scoreDay: ${error.message}`);
+    }
   }
 
   async getAllBrands(

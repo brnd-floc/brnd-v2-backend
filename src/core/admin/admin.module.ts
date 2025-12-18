@@ -9,7 +9,7 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './services/admin.service';
 
 // Models
-import { Brand, Category } from '../../models';
+import { Brand, Category, UserBrandVotes } from '../../models';
 
 // Other modules
 import { AuthModule } from '../auth/auth.module';
@@ -20,7 +20,7 @@ import { IpfsService } from '../../utils/ipfs.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Brand, Category]),
+    TypeOrmModule.forFeature([Brand, Category, UserBrandVotes]),
     AuthModule,
     BlockchainModule,
     AirdropModule,
