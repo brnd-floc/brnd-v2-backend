@@ -381,66 +381,66 @@ export class AirdropController {
   }
 
   // HERE IS THE CODE TO RECALCULATE ALL USERS AIRDROP ALLOCATION
-  // @Get('recalculate-all-users')
-  // @UseGuards(AuthorizationGuard)
-  // async calculateAllUsers(
-  //   @Session() user: QuickAuthPayload,
-  //   @Res() res: Response,
-  //   @Query('batchSize') batchSize?: string,
-  // ) {
-  //   try {
-  //     const fid = user.sub;
-  //     if (fid !== 16098) {
-  //       return hasError(
-  //         res,
-  //         HttpStatus.FORBIDDEN,
-  //         'calculateAllUsers',
-  //         'Only jp can calculate all users',
-  //       );
-  //     }
-  //     const batchSizeNum = batchSize ? parseInt(batchSize, 10) : 50;
-  //     const maxBatchSize = 50;
-  //     const actualBatchSize = Math.min(batchSizeNum, maxBatchSize);
+  @Get('recalculate-all-users')
+  @UseGuards(AuthorizationGuard)
+  async calculateAllUsers(
+    @Session() user: QuickAuthPayload,
+    @Res() res: Response,
+    @Query('batchSize') batchSize?: string,
+  ) {
+    try {
+      const fid = user.sub;
+      if (fid !== 16098) {
+        return hasError(
+          res,
+          HttpStatus.FORBIDDEN,
+          'calculateAllUsers',
+          'Only jp can calculate all users',
+        );
+      }
+      const batchSizeNum = batchSize ? parseInt(batchSize, 10) : 50;
+      const maxBatchSize = 50;
+      const actualBatchSize = Math.min(batchSizeNum, maxBatchSize);
 
-  //     console.log(
-  //       `🚀 [CONTROLLER] Starting bulk airdrop calculation with batch size: ${actualBatchSize}`,
-  //     );
+      console.log(
+        `🚀 [CONTROLLER] Starting bulk airdrop calculation with batch size: ${actualBatchSize}`,
+      );
 
-  //     // Check if snapshot already exists - warn but allow manual override via API
-  //     const existingSnapshotsCount =
-  //       await this.airdropService.airdropSnapshotRepository.count();
+      // Check if snapshot already exists - warn but allow manual override via API
+      const existingSnapshotsCount =
+        await this.airdropService.airdropSnapshotRepository.count();
 
-  //     if (existingSnapshotsCount > 0) {
-  //       console.warn(
-  //         `⚠️ [CONTROLLER] WARNING: ${existingSnapshotsCount} existing snapshot(s) found!`,
-  //       );
-  //       console.warn(
-  //         '⚠️ [CONTROLLER] API calculation will proceed but may overwrite frozen allocations.',
-  //       );
-  //       console.warn(
-  //         'ℹ️ [CONTROLLER] Consider clearing snapshots first if this is intentional.',
-  //       );
-  //     }
+      if (existingSnapshotsCount > 0) {
+        console.warn(
+          `⚠️ [CONTROLLER] WARNING: ${existingSnapshotsCount} existing snapshot(s) found!`,
+        );
+        console.warn(
+          '⚠️ [CONTROLLER] API calculation will proceed but may overwrite frozen allocations.',
+        );
+        console.warn(
+          'ℹ️ [CONTROLLER] Consider clearing snapshots first if this is intentional.',
+        );
+      }
 
-  //     const result =
-  //       await this.airdropService.calculateAirdropForAllUsers(actualBatchSize);
+      const result =
+        await this.airdropService.calculateAirdropForAllUsers(actualBatchSize);
 
-  //     console.log(`✅ [CONTROLLER] Bulk calculation completed:`, result);
+      console.log(`✅ [CONTROLLER] Bulk calculation completed:`, result);
 
-  //     return hasResponse(res, {
-  //       message: 'Bulk airdrop calculation completed',
-  //       results: result,
-  //     });
-  //   } catch (error) {
-  //     console.error('Error calculating airdrop for all users:', error);
-  //     return hasError(
-  //       res,
-  //       HttpStatus.INTERNAL_SERVER_ERROR,
-  //       'calculateAllUsers',
-  //       'Error calculating airdrop for all users',
-  //     );
-  //   }
-  // }
+      return hasResponse(res, {
+        message: 'Bulk airdrop calculation completed',
+        results: result,
+      });
+    } catch (error) {
+      console.error('Error calculating airdrop for all users:', error);
+      return hasError(
+        res,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'calculateAllUsers',
+        'Error calculating airdrop for all users',
+      );
+    }
+  }
 
   /**cooy
    * Check if user can claim airdrop
