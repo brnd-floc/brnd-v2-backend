@@ -245,6 +245,13 @@ export class BrandController {
           'Vote ID is required',
         );
       }
+      logger.log(
+        'Verifying share for vote id',
+        voteId,
+        castHash,
+        recipientAddress,
+        transactionHash,
+      );
 
       const isClaimRetrieval = !castHash || castHash.trim() === '';
 
@@ -288,7 +295,7 @@ export class BrandController {
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
-      logger.log('THE VOTE IS', vote);
+      logger.log('THE VOTE on the verify share IS', vote);
 
       if (!vote) {
         return hasError(
@@ -335,6 +342,7 @@ export class BrandController {
           'https://rebrnd.lat',
           'https://www.brnd.land',
           'https://poiesis.anky.app',
+          'https://brnd-v2-backend-production.up.railway.app',
         ];
 
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {

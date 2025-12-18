@@ -450,7 +450,6 @@ export class IndexerService {
       await this.userService.addPoints(user.id, leaderboardPoints);
       let cloudinaryUrl: string | null = null;
       try {
-        console.log('going to generate podium image');
         cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
           voteData.transactionHash,
         );

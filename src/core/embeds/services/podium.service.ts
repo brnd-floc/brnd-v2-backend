@@ -184,14 +184,12 @@ export class PodiumService implements OnModuleInit {
       if (!vote) throw new Error(`Vote not found: ${transactionHash}`);
 
       const podiumData = this.voteToPodiumData(vote);
-      console.log('THE PODIUM DATA IS', podiumData);
       const imageBuffer = await this.generatePodiumImage(podiumData);
 
       const cloudinaryUrl = await this.uploadToCloudinary(
         imageBuffer,
         transactionHash,
       );
-      console.log('THE CLOUDINARY URL IS', cloudinaryUrl);
 
       await this.userBrandVotesRepository.update(
         { transactionHash },
