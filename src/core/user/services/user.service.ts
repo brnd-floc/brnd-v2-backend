@@ -653,12 +653,14 @@ export class UserService {
 
   async getTodaysVoteWithBrands(userId: number): Promise<any | null> {
     try {
-      const currentUTCDate = new Date().toISOString().split('T')[0];
+      const now = Math.floor(Date.now() / 1000);
+      const day = Math.floor(now / 86400);
+      console.log('THE DAY IS', day);
 
       const vote = await this.userBrandVotesRepository.findOne({
         where: {
           user: { id: userId },
-          date: new Date(currentUTCDate),
+          day: day,
         },
         relations: ['brand1', 'brand2', 'brand3'],
         select: {
