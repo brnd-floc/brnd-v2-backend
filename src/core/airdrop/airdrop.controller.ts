@@ -398,8 +398,8 @@ export class AirdropController {
           'Only jp can calculate all users',
         );
       }
-      const batchSizeNum = batchSize ? parseInt(batchSize, 10) : 50;
-      const maxBatchSize = 50;
+      const batchSizeNum = 88;
+      const maxBatchSize = 88;
       const actualBatchSize = Math.min(batchSizeNum, maxBatchSize);
 
       console.log(

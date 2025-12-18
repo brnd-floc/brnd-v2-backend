@@ -297,7 +297,7 @@ export class EmbedsService {
   private generateEmbedHtml(
     embedData: EmbedData,
     type: string,
-    title: string = 'BRND',
+    title: string = 'START BRND',
   ): string {
     const timestamp = Date.now();
     // Ensure we handle existing query params in the imageUrl

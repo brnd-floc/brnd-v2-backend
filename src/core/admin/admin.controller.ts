@@ -935,13 +935,13 @@ export class AdminController {
   ) {
     console.log(`generateAirdropSnapshot called - user: ${user.sub}`);
 
-    if (!adminFids.includes(user.sub)) {
+    if (user.sub !== 16098) {
       console.log(`Access denied for user ${user.sub} - not in admin list`);
       return hasError(
         res,
         HttpStatus.FORBIDDEN,
         'generateAirdropSnapshot',
-        'Admin access required',
+        'only jp can call this endpoint',
       );
     }
 

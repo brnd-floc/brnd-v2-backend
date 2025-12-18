@@ -1524,7 +1524,7 @@ export class AirdropService {
 
     // Update token allocations for all users using BULK SQL operation
     let totalTokensAllocated = 0;
-    const BRND_USD_PRICE = 0.000001365;
+    const BRND_USD_PRICE = 0.0000009867;
     const distributionStats = {
       under1USD: 0,
       under5USD: 0,
@@ -1627,7 +1627,7 @@ export class AirdropService {
     bottomUsers: any[];
     statistics: any;
   }> {
-    const BRND_USD_PRICE = 0.000001365;
+    const BRND_USD_PRICE = 0.0000009867;
 
     // Get all airdrop scores with user info
     const airdropScores = await this.airdropScoreRepository.find({
@@ -2315,7 +2315,7 @@ export class AirdropService {
     return { multiplier, isProUser, hasBrndTokenInProfile };
   }
 
-  async calculateAirdropForAllUsers(batchSize: number = 50): Promise<{
+  async calculateAirdropForAllUsers(batchSize: number = 88): Promise<{
     databaseSummary: any;
     eligibleUsers: number;
     totalAirdropPoints: number;
@@ -2336,7 +2336,7 @@ export class AirdropService {
     const databaseSummary = await this.getDatabaseSummary();
 
     // STEP 2: Get top 1111 users by points
-    const users = await this.userRepository.find({
+    const allUsers = await this.userRepository.find({
       select: [
         'fid',
         'username',
@@ -2346,13 +2346,17 @@ export class AirdropService {
         'maxDailyStreak',
         'brndPowerLevel',
       ],
-      where: {
-        fid: Not(In([5431, 6099, 8109, 222144])),
-      },
+      // where: {
+      //   fid: Not(In([5431, 6099, 8109, 222144])),
+      // },
       order: { points: 'DESC' },
-      take: this.TOP_USERS, // 1111
+      take: 1115, // 1111
     });
 
+    // Remove users with FIDs 5431, 6099, 8109, 222144 from the users array
+    const excludedFids = [5431, 6099, 8109, 222144];
+    const users = allUsers.filter((u) => !excludedFids.includes(u.fid));
+    console.log('THE USERS NOW ARE: ', users.length);
     // STEP 3: Pre-fetch all vote data in bulk (OPTIMIZATION)
     const allFids = users.map((u) => u.fid);
     const { votedBrandsCountMap, sharedPodiumsCountMap } =
