@@ -17,6 +17,7 @@ import { AdminService } from './services/admin.service';
 import { ContractUploadService } from '../blockchain/services/contract-upload.service';
 import { AirdropService } from '../airdrop/services/airdrop.service';
 import { PodiumService } from '../embeds/services/podium.service';
+import { FarcasterNotificationService } from '../notification/services/farcaster-notification.service';
 import {
   CreateBrandDto,
   UpdateBrandDto,
@@ -46,6 +47,7 @@ export class AdminController {
     private readonly contractUploadService: ContractUploadService,
     private readonly airdropService: AirdropService,
     private readonly podiumService: PodiumService,
+    private readonly farcasterNotificationService: FarcasterNotificationService,
   ) {
     console.log('AdminController initialized');
   }
@@ -377,29 +379,29 @@ export class AdminController {
     }
   }
 
-  // @Get('recalculate-score-day/20440')
-  // async recalculateScoreDayFor20440(@Res() res: Response) {
-  //   console.log(`recalculateScoreDayFor20440 called`);
+  // @Get('recalculate-score-day/20441')
+  // async recalculateScoreDayFor20441(@Res() res: Response) {
+  //   console.log(`recalculateScoreDayFor20441 called`);
 
   //   try {
-  //     const result = await this.adminService.recalculateScoreDayForDay(20440);
+  //     const result = await this.adminService.recalculateScoreDayForDay(20441);
   //     console.log('ScoreDay recalculation result:', result);
 
   //     return hasResponse(res, {
   //       success: true,
   //       message: result.message,
   //       data: {
-  //         day: 20440,
+  //         day: 20441,
   //         updatedBrands: result.updatedBrands,
   //         processedVotes: result.processedVotes,
   //       },
   //     });
   //   } catch (error) {
-  //     console.error('Error in recalculateScoreDayFor20440:', error);
+  //     console.error('Error in recalculateScoreDayFor20441:', error);
   //     return hasError(
   //       res,
   //       HttpStatus.INTERNAL_SERVER_ERROR,
-  //       'recalculateScoreDayFor20440',
+  //       'recalculateScoreDayFor20441',
   //       error.message,
   //     );
   //   }
@@ -1041,9 +1043,9 @@ export class AdminController {
       console.log(`👤 [CONTRACT] Admin account: ${account.address}`);
       console.log(`⛓️ [CONTRACT] Chain ID: ${base.id} (Base)`);
 
-      // ABI for updateMerkleRoot function
+      // ABI for setMerkleRoot function
       const airdropAbi = parseAbi([
-        'function updateMerkleRoot(bytes32 newRoot) external',
+        'function setMerkleRoot(bytes32 newRoot) external',
         'function merkleRoot() external view returns (bytes32)',
         'function owner() external view returns (address)',
       ]);
@@ -1053,16 +1055,16 @@ export class AdminController {
         airdropAbi.map((f) => f.name),
       );
 
-      // Call updateMerkleRoot on the contract
+      // Call setMerkleRoot on the contract
       console.log(`📞 [CONTRACT] Preparing contract call...`);
-      console.log(`📞 [CONTRACT] Function: updateMerkleRoot`);
+      console.log(`📞 [CONTRACT] Function: setMerkleRoot`);
       console.log(`📞 [CONTRACT] Args: [${merkleRoot}]`);
 
       const txHash = await walletClient.writeContract({
         account,
         address: AIRDROP_CONTRACT_ADDRESS as `0x${string}`,
         abi: airdropAbi,
-        functionName: 'updateMerkleRoot',
+        functionName: 'setMerkleRoot',
         args: [merkleRoot as `0x${string}`],
         chain: base,
       });

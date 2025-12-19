@@ -195,7 +195,7 @@ export class BrandSchedulerService {
    */
   private async sendDailyNotification(brands: Brand[]): Promise<void> {
     const title = 'Vote for farcaster brands!'; // 26 chars - compliant
-    const body = this.notificationService.formatPodiumMessage(brands);
+    const body = this.notificationService.formatPodiumMessage(brands, 'day');
     const notificationId = `daily-${new Date().toISOString().split('T')[0]}`;
 
     await this.notificationService.sendNotificationToAllUsers(
@@ -211,7 +211,7 @@ export class BrandSchedulerService {
    */
   private async sendWeeklyNotification(brands: Brand[]): Promise<void> {
     const title = 'Top brands of the week';
-    const body = this.notificationService.formatPodiumMessage(brands);
+    const body = this.notificationService.formatPodiumMessage(brands, 'week');
     const now = new Date();
     const weekEnd = new Date(now);
     weekEnd.setUTCDate(now.getUTCDate() - 1); // Yesterday (Friday)
@@ -230,7 +230,7 @@ export class BrandSchedulerService {
    */
   private async sendMonthlyNotification(brands: Brand[]): Promise<void> {
     const title = 'Top brands of the month';
-    const body = this.notificationService.formatPodiumMessage(brands);
+    const body = this.notificationService.formatPodiumMessage(brands, 'month');
     const now = new Date();
     const lastMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
     const notificationId = `monthly-${lastMonth.getUTCFullYear()}-${String(lastMonth.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -264,7 +264,10 @@ export class BrandSchedulerService {
       );
 
       const title = 'Vote reminder - top brands!'; // 28 chars - compliant
-      const body = this.notificationService.formatPodiumMessage(topDailyBrands);
+      const body = this.notificationService.formatPodiumMessage(
+        topDailyBrands,
+        'day',
+      );
       const today = new Date().toISOString().split('T')[0];
       const notificationId = `reminder-${today}`;
 

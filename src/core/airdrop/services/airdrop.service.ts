@@ -350,7 +350,7 @@ export class AirdropService {
       const apiKey = getConfig().neynar.apiKey.replace(/&$/, '');
 
       const responseCasts = await fetch(
-        `https://api.neynar.com/v2/farcaster/feed/user/casts?fid=${fid}&channel_id=brnd&include_replies=false`,
+        `https://api.neynar.com/v2/farcaster/feed/user/casts?fid=${fid}&channel_id=brnd`,
         {
           headers: {
             accept: 'application/json',
@@ -2776,5 +2776,29 @@ export class AirdropService {
       merkleRoot: snapshot.merkleRoot,
       snapshotId: snapshot.id,
     };
+  }
+
+  /**
+   * Get all eligible airdrop users with their token allocations
+   * Used for sending notifications to eligible users
+   */
+  async getEligibleAirdropUsers(): Promise<Array<{
+    fid: number;
+    tokenAllocation: number;
+    username?: string;
+  }>> {
+    const airdropScores = await this.airdropScoreRepository.find({
+      where: {
+        tokenAllocation: Not(0),
+      },
+      relations: ['user'],
+      select: ['fid', 'tokenAllocation'],
+    });
+
+    return airdropScores.map(score => ({
+      fid: score.fid,
+      tokenAllocation: score.tokenAllocation,
+      username: score.user?.username || `user-${score.fid}`,
+    }));
   }
 }

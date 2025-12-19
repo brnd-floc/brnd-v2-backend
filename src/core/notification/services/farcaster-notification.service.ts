@@ -324,10 +324,20 @@ export class FarcasterNotificationService {
   /**
    * Format podium message for top 3 brands with character limit compliance
    */
-  formatPodiumMessage(brands: Brand[]): string {
+  formatPodiumMessage(
+    brands: Brand[],
+    period: 'day' | 'week' | 'month',
+  ): string {
     if (brands.length === 0) {
       return 'No brands this period.';
     }
+
+    const periodText =
+      period === 'day'
+        ? 'this day'
+        : period === 'week'
+          ? 'this week'
+          : 'the month';
 
     const podium = brands
       .slice(0, 3)
@@ -337,14 +347,14 @@ export class FarcasterNotificationService {
           brand.name.length > 20
             ? brand.name.substring(0, 17) + '...'
             : brand.name;
-        return `${medal} ${brandName}`;
+        return `Top brands of ${periodText}: ${medal} ${brandName}`;
       })
       .join('\n');
 
     // Ensure the message doesn't exceed 128 chars
     if (podium.length > 128) {
       // Fallback: just show count
-      return `Top brands: ${brands
+      return `Top brands of ${periodText}: ${brands
         .slice(0, 3)
         .map((_, i) => ['🥇', '🥈', '🥉'][i])
         .join(' ')}`;
@@ -360,7 +370,7 @@ export class FarcasterNotificationService {
     fid: number,
     title: string,
     body: string,
-    targetUrl: string,
+    targetUrl: string = 'https://brnd.land',
     notificationId: string,
   ): Promise<{ sent: boolean; message: string }> {
     // Validate content against Farcaster limits
