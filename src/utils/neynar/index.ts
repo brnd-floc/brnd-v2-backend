@@ -218,4 +218,28 @@ export default class NeynarService {
       throw error;
     }
   };
+
+  /**
+   * Fetches recent casts for a user by FID
+   * @param fid - The Farcaster ID of the user
+   * @param limit - Maximum number of casts to fetch (default: 5)
+   * @param includeReplies - Whether to include replies (default: false)
+   * @returns Array of casts
+   */
+  async getUserCasts(
+    fid: number,
+    limit: number = 5,
+    includeReplies: boolean = false,
+  ): Promise<Cast[]> {
+    try {
+      const response = await this.client.fetchCastsForUser({
+        fid,
+        limit,
+        includeReplies,
+      });
+      return response.casts;
+    } catch (error) {
+      throw error;
+    }
+  }
 }

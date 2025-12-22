@@ -66,4 +66,7 @@ export class UserBrandVotes {
 
   @Column({ nullable: true })
   podiumImageUrl: string;
+
+  @Column({ nullable: true })
+  castedFromFid: number;
 }

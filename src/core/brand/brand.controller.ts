@@ -228,11 +228,13 @@ export class BrandController {
       voteId,
       recipientAddress,
       transactionHash,
+      castedFromFid,
     }: {
       castHash: string;
       voteId: string;
-      recipientAddress?: string;
-      transactionHash?: string;
+      recipientAddress: string;
+      transactionHash: string;
+      castedFromFid: number;
     },
     @Res() res: Response,
   ): Promise<Response> {
@@ -251,6 +253,7 @@ export class BrandController {
         castHash,
         recipientAddress,
         transactionHash,
+        castedFromFid,
       );
 
       const isClaimRetrieval = !castHash || castHash.trim() === '';
@@ -273,7 +276,12 @@ export class BrandController {
         );
       }
 
-      if (!/^0x[a-fA-F0-9]{40}$/.test(castHash)) {
+      // For Warpcast (fid 9152), castHash is required and must be validated
+      // For Base app (fid 309857), castHash will be fetched by polling
+      const isBaseApp = castedFromFid === 309857;
+      const isWarpcast = castedFromFid === 9152;
+
+      if (isWarpcast && (!castHash || !/^0x[a-fA-F0-9]{40}$/.test(castHash))) {
         return hasError(
           res,
           HttpStatus.BAD_REQUEST,
@@ -326,7 +334,98 @@ export class BrandController {
 
       try {
         const neynar = new NeynarService();
-        const castData = await neynar.getCastByHash(castHash);
+        let resolvedCastHash = castHash;
+        let castData;
+
+        // For Base app (fid 309857), we need to poll for the cast
+        if (isBaseApp) {
+          const validEmbedUrls = [
+            'https://brnd.land',
+            'https://rebrnd.lat',
+            'https://www.brnd.land',
+            'https://poiesis.anky.app',
+            'https://brnd-v2-backend-production.up.railway.app',
+          ];
+
+          const expectedTxHash = vote.transactionHash;
+          let foundCast = null;
+          const maxPollAttempts = 10;
+          const pollInterval = 3000; // 2 seconds
+
+          // Poll for the cast
+          for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+            try {
+              // Recalculate oneMinuteAgo on each attempt to account for time passing
+              const oneMinuteAgo = Date.now() - 60 * 1000;
+              const casts = await neynar.getUserCasts(user.sub, 10, false);
+
+              for (const cast of casts) {
+                // Check if cast was made within the last 1 minute
+                // Cast timestamp is in ISO format (e.g., "2025-12-22T14:58:08.000Z")
+                const castTimestamp = new Date(cast.timestamp).getTime();
+                if (castTimestamp < oneMinuteAgo) {
+                  continue; // Cast is too old
+                }
+
+                // Check if cast has the correct embed URL with the transaction hash
+                for (const embed of cast.embeds) {
+                  if ('url' in embed) {
+                    const embedUrl = embed.url as string;
+                    const hasValidBaseUrl = validEmbedUrls.some((baseUrl) =>
+                      embedUrl.includes(baseUrl),
+                    );
+
+                    if (hasValidBaseUrl && embedUrl.includes('/podium/')) {
+                      // Extract transaction hash from URL (handle query params/fragments)
+                      const txHashFromEmbed = embedUrl
+                        .split('/podium/')[1]
+                        ?.split('?')[0]
+                        ?.split('#')[0]
+                        ?.trim();
+                      if (txHashFromEmbed === expectedTxHash) {
+                        foundCast = cast;
+                        resolvedCastHash = cast.hash;
+                        break;
+                      }
+                    }
+                  }
+                }
+
+                if (foundCast) {
+                  break;
+                }
+              }
+
+              if (foundCast) {
+                break;
+              }
+
+              // Wait before next poll attempt
+              if (attempt < maxPollAttempts - 1) {
+                await new Promise((resolve) =>
+                  setTimeout(resolve, pollInterval),
+                );
+              }
+            } catch (pollError) {
+              logger.error('Error polling for cast:', pollError);
+              // Continue to next attempt
+            }
+          }
+
+          if (!foundCast) {
+            return hasError(
+              res,
+              HttpStatus.NOT_FOUND,
+              'verifyShare',
+              'Could not find cast with the expected embed URL within the last minute',
+            );
+          }
+
+          castData = foundCast;
+        } else {
+          // For Warpcast (fid 9152), use the provided castHash
+          castData = await neynar.getCastByHash(castHash);
+        }
 
         if (castData.author.fid !== user.sub) {
           return hasError(
@@ -379,7 +478,7 @@ export class BrandController {
 
         await this.brandService.markVoteAsShared(
           vote.transactionHash,
-          castHash,
+          resolvedCastHash,
         );
         const updatedUser = await this.userService.addPoints(dbUser.id, 3);
 
@@ -389,7 +488,7 @@ export class BrandController {
         await this.rewardService.verifyShareForReward(
           dbUser.fid,
           day,
-          castHash,
+          resolvedCastHash,
         );
 
         let claimSignature = null;
@@ -399,7 +498,7 @@ export class BrandController {
               dbUser.fid,
               day,
               recipientAddress,
-              castHash,
+              resolvedCastHash,
             );
           } catch (claimError) {
             // Do nothing, skip claim sig on error
@@ -412,6 +511,7 @@ export class BrandController {
           newTotalPoints: updatedUser.points,
           message: 'Share verified successfully! 3 points awarded.',
           day,
+          castHash: resolvedCastHash,
           claimSignature: claimSignature
             ? {
                 signature: claimSignature.signature,
@@ -439,7 +539,12 @@ export class BrandController {
               body: JSON.stringify({
                 signer_uuid: config.neynar.signerUuid,
                 embeds: [
-                  { cast_id: { hash: castHash, fid: castData.author.fid } },
+                  {
+                    cast_id: {
+                      hash: resolvedCastHash,
+                      fid: castData.author.fid,
+                    },
+                  },
                 ],
 
                 text: `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`,
@@ -452,7 +557,6 @@ export class BrandController {
 
         return hasResponse(res, {
           ...responsePayload,
-          castHash,
         });
       } catch (neynarError) {
         if (neynarError.message?.includes('Cast not found')) {
