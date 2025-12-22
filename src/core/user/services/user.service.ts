@@ -17,6 +17,7 @@ import {
 import { logger } from 'src/main';
 import { AirdropContractService } from '../../airdrop/services/airdrop-contract.service';
 import { getConfig } from '../../../security/config';
+import { of } from 'rxjs';
 
 /**
  * Interface for leaderboard response with user position info
@@ -1201,7 +1202,7 @@ export class UserService {
           : undefined,
       };
 
-      if (airdropScore) {
+      if (airdropScore && Number(airdropScore.tokenAllocation) > 0) {
         response.airdropScore = Number(airdropScore.finalScore);
         response.tokenAllocation = Number(airdropScore.tokenAllocation);
         response.percentage = Number(airdropScore.percentage);
@@ -1213,6 +1214,8 @@ export class UserService {
           },
         });
         response.leaderboardPosition = higherScores + 1;
+      } else {
+        response.isEligible = false;
       }
 
       return response;
