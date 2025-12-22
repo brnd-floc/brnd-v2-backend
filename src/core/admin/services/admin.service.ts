@@ -105,14 +105,18 @@ export class AdminService {
     return new Date(cycleStart.getTime() + (cycleNumber - 1) * msPerWeek);
   }
 
-  async recalculateScoreDayForDay(day: number): Promise<{ message: string; updatedBrands: number; processedVotes: number }> {
+  async recalculateScoreDayForDay(day: number): Promise<{
+    message: string;
+    updatedBrands: number;
+    processedVotes: number;
+  }> {
     console.log(`🔄 Recalculating scoreDay for day ${day}...`);
 
     try {
       // Reset all scoreDay values to 0
       console.log('📊 Resetting all scoreDay values to 0...');
       const resetResult = await this.brandRepository.query(
-        'UPDATE brands SET scoreDay = 0'
+        'UPDATE brands SET scoreDay = 0',
       );
       console.log(`✅ Reset scoreDay for all brands`);
 
@@ -120,9 +124,9 @@ export class AdminService {
       console.log(`📊 Fetching votes for day ${day}...`);
       const votes = await this.userBrandVotesRepository.find({
         where: { day },
-        relations: ['brand1', 'brand2', 'brand3']
+        relations: ['brand1', 'brand2', 'brand3'],
       });
-      
+
       console.log(`📊 Found ${votes.length} votes for day ${day}`);
 
       let processedVotes = 0;
@@ -130,32 +134,37 @@ export class AdminService {
 
       // Process each vote and accumulate scores
       for (const vote of votes) {
-        if (vote.brndPaidWhenCreatingPodium && vote.brndPaidWhenCreatingPodium > 0) {
+        if (
+          vote.brndPaidWhenCreatingPodium &&
+          vote.brndPaidWhenCreatingPodium > 0
+        ) {
           const baseAmount = vote.brndPaidWhenCreatingPodium;
-          
+
           // 60% to brand1
           if (vote.brand1?.id) {
             const currentScore = brandScores.get(vote.brand1.id) || 0;
-            brandScores.set(vote.brand1.id, currentScore + (baseAmount * 0.6));
+            brandScores.set(vote.brand1.id, currentScore + baseAmount * 0.6);
           }
-          
+
           // 30% to brand2
           if (vote.brand2?.id) {
             const currentScore = brandScores.get(vote.brand2.id) || 0;
-            brandScores.set(vote.brand2.id, currentScore + (baseAmount * 0.3));
+            brandScores.set(vote.brand2.id, currentScore + baseAmount * 0.3);
           }
-          
+
           // 10% to brand3
           if (vote.brand3?.id) {
             const currentScore = brandScores.get(vote.brand3.id) || 0;
-            brandScores.set(vote.brand3.id, currentScore + (baseAmount * 0.1));
+            brandScores.set(vote.brand3.id, currentScore + baseAmount * 0.1);
           }
-          
+
           processedVotes++;
         }
       }
 
-      console.log(`📊 Processed ${processedVotes} votes with brndPaidWhenCreatingPodium values`);
+      console.log(
+        `📊 Processed ${processedVotes} votes with brndPaidWhenCreatingPodium values`,
+      );
       console.log(`📊 Updating scores for ${brandScores.size} brands...`);
 
       // Update scoreDay for each brand
@@ -163,7 +172,7 @@ export class AdminService {
       for (const [brandId, score] of brandScores.entries()) {
         await this.brandRepository.update(
           { id: brandId },
-          { scoreDay: Math.round(score) }
+          { scoreDay: Math.round(score) },
         );
         updatedBrands++;
       }
@@ -173,7 +182,7 @@ export class AdminService {
       return {
         message: `ScoreDay recalculated successfully for day ${day}`,
         updatedBrands,
-        processedVotes
+        processedVotes,
       };
     } catch (error) {
       console.error('❌ Failed to recalculate scoreDay:', error);
@@ -486,7 +495,9 @@ export class AdminService {
    * Validates brand data for on-chain creation
    * Checks for conflicts, duplicates, and data integrity
    */
-  async validateBrandForCreation(prepareMetadataDto: PrepareMetadataDto): Promise<{
+  async validateBrandForCreation(
+    prepareMetadataDto: PrepareMetadataDto,
+  ): Promise<{
     valid: boolean;
     message?: string;
     conflicts?: string[];
@@ -502,7 +513,10 @@ export class AdminService {
         conflicts.push('Brand name is required');
       }
 
-      if (!prepareMetadataDto.handle || prepareMetadataDto.handle.trim() === '') {
+      if (
+        !prepareMetadataDto.handle ||
+        prepareMetadataDto.handle.trim() === ''
+      ) {
         conflicts.push('Handle is required');
       }
 
@@ -521,11 +535,17 @@ export class AdminService {
         conflicts.push('Website URL is required');
       }
 
-      if (!prepareMetadataDto.description || prepareMetadataDto.description.trim() === '') {
+      if (
+        !prepareMetadataDto.description ||
+        prepareMetadataDto.description.trim() === ''
+      ) {
         conflicts.push('Description is required');
       }
 
-      if (!prepareMetadataDto.channelOrProfile || prepareMetadataDto.channelOrProfile.trim() === '') {
+      if (
+        !prepareMetadataDto.channelOrProfile ||
+        prepareMetadataDto.channelOrProfile.trim() === ''
+      ) {
         conflicts.push('Channel or profile is required');
       }
 
@@ -535,7 +555,9 @@ export class AdminService {
       });
 
       if (existingBrandByName) {
-        conflicts.push(`Brand name "${prepareMetadataDto.name}" already exists`);
+        conflicts.push(
+          `Brand name "${prepareMetadataDto.name}" already exists`,
+        );
       }
 
       // 3. Check for duplicate handles
@@ -556,11 +578,16 @@ export class AdminService {
       });
 
       if (existingBrandByUrl) {
-        conflicts.push(`Website URL "${prepareMetadataDto.url}" already exists`);
+        conflicts.push(
+          `Website URL "${prepareMetadataDto.url}" already exists`,
+        );
       }
 
       // 5. Check for duplicate channel/profile
-      if (prepareMetadataDto.queryType === 0 && prepareMetadataDto.channelOrProfile) {
+      if (
+        prepareMetadataDto.queryType === 0 &&
+        prepareMetadataDto.channelOrProfile
+      ) {
         // Channel validation
         const channelName = prepareMetadataDto.channelOrProfile.startsWith('/')
           ? prepareMetadataDto.channelOrProfile
@@ -573,7 +600,10 @@ export class AdminService {
         if (existingBrandByChannel) {
           conflicts.push(`Channel "${channelName}" already exists`);
         }
-      } else if (prepareMetadataDto.queryType === 1 && prepareMetadataDto.channelOrProfile) {
+      } else if (
+        prepareMetadataDto.queryType === 1 &&
+        prepareMetadataDto.channelOrProfile
+      ) {
         // Profile validation
         const profileName = prepareMetadataDto.channelOrProfile.startsWith('@')
           ? prepareMetadataDto.channelOrProfile
@@ -595,7 +625,9 @@ export class AdminService {
         });
 
         if (!category) {
-          conflicts.push(`Category with ID ${prepareMetadataDto.categoryId} does not exist`);
+          conflicts.push(
+            `Category with ID ${prepareMetadataDto.categoryId} does not exist`,
+          );
         }
       }
 
@@ -805,7 +837,7 @@ export class AdminService {
         warpcastUrl: metadata.warpcastUrl || metadata.url || '',
         description: metadata.description || '',
         imageUrl: metadata.imageUrl || '',
-        profile,
+        profile: metadata.handle || profile,
         channel,
         queryType,
         followerCount,
