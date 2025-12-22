@@ -63,8 +63,7 @@ export const getConfig = () => ({
     apiKey: process.env.COLLECTIBLES_INDEXER_API_KEY,
   },
   notifications: {
-    enabled:
-      process.env.NOTIFICATIONS_ENABLED === 'true' || !getConfig().isProduction,
+    enabled: process.env.NOTIFICATIONS_ENABLED,
     baseUrl: process.env.NOTIFICATION_BASE_URL || 'https://brnd.land',
     miniappUrl: process.env.MINIAPP_URL || 'https://brnd.land',
     dailyReminderHour: parseInt(process.env.DAILY_REMINDER_HOUR || '10', 10),
