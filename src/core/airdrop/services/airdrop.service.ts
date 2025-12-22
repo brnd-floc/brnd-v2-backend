@@ -2782,11 +2782,13 @@ export class AirdropService {
    * Get all eligible airdrop users with their token allocations
    * Used for sending notifications to eligible users
    */
-  async getEligibleAirdropUsers(): Promise<Array<{
-    fid: number;
-    tokenAllocation: number;
-    username?: string;
-  }>> {
+  async getEligibleAirdropUsers(): Promise<
+    Array<{
+      fid: number;
+      tokenAllocation: number;
+      username?: string;
+    }>
+  > {
     const airdropScores = await this.airdropScoreRepository.find({
       where: {
         tokenAllocation: Not(0),
@@ -2795,7 +2797,7 @@ export class AirdropService {
       select: ['fid', 'tokenAllocation'],
     });
 
-    return airdropScores.map(score => ({
+    return airdropScores.map((score) => ({
       fid: score.fid,
       tokenAllocation: score.tokenAllocation,
       username: score.user?.username || `user-${score.fid}`,

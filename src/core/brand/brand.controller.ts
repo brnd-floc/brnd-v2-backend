@@ -722,40 +722,6 @@ export class BrandController {
     }
   }
 
-  @Get('/dev/seed')
-  @UseGuards(AuthorizationGuard)
-  async seedBrands(
-    @Session() user: QuickAuthPayload,
-    @Query('overwrite') overwrite: string = 'false',
-    @Res() res: Response,
-  ): Promise<Response> {
-    const adminFids = [16098, 5431];
-    if (!adminFids.includes(user.sub)) {
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'seedBrands',
-        'Admin access required',
-      );
-    }
-    try {
-      const shouldOverwrite = overwrite.toLowerCase() === 'true';
-      const result = await this.brandSeederService.seedBrands(shouldOverwrite);
-
-      return hasResponse(res, {
-        message: 'Brand seeding completed successfully',
-        ...result,
-      });
-    } catch (error) {
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'seedBrands',
-        `Seeding failed: ${error.message}`,
-      );
-    }
-  }
-
   @Get('/dev/stats')
   @UseGuards(AuthorizationGuard)
   async getDatabaseStats(
@@ -784,38 +750,6 @@ export class BrandController {
         HttpStatus.INTERNAL_SERVER_ERROR,
         'getDatabaseStats',
         `Failed to get stats: ${error.message}`,
-      );
-    }
-  }
-
-  @Get('/dev/preview')
-  @UseGuards(AuthorizationGuard)
-  async previewSeeding(
-    @Session() user: QuickAuthPayload,
-    @Res() res: Response,
-  ): Promise<Response> {
-    const adminFids = [16098, 5431];
-    if (!adminFids.includes(user.sub)) {
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'previewSeeding',
-        'Admin access required',
-      );
-    }
-    try {
-      const preview = await this.brandSeederService.previewSeeding();
-
-      return hasResponse(res, {
-        message: 'Seeding preview completed',
-        ...preview,
-      });
-    } catch (error) {
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'previewSeeding',
-        `Preview failed: ${error.message}`,
       );
     }
   }
@@ -850,101 +784,6 @@ export class BrandController {
         HttpStatus.INTERNAL_SERVER_ERROR,
         'getRecentPodiums',
         'Failed to fetch recent podiums',
-      );
-    }
-  }
-
-  @Post('/dev/clear')
-  @UseGuards(AuthorizationGuard)
-  async clearAllBrands(
-    @Session() user: QuickAuthPayload,
-    @Query('confirm') confirm: string,
-    @Res() res: Response,
-  ): Promise<Response> {
-    const adminFids = [16098, 5431];
-    if (!adminFids.includes(user.sub)) {
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'clearAllBrands',
-        'Admin access required',
-      );
-    }
-    try {
-      if (confirm !== 'yes') {
-        return hasError(
-          res,
-          HttpStatus.BAD_REQUEST,
-          'clearAllBrands',
-          'Must provide ?confirm=yes to clear all brands',
-        );
-      }
-
-      const deletedCount = await this.brandSeederService.clearAllBrands();
-
-      return hasResponse(res, {
-        message: `Successfully cleared ${deletedCount} brands from database`,
-        deletedCount,
-        warning: 'This action cannot be undone',
-      });
-    } catch (error) {
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'clearAllBrands',
-        `Failed to clear brands: ${error.message}`,
-      );
-    }
-  }
-
-  @Post('/dev/test-cron')
-  @UseGuards(AuthorizationGuard)
-  async testCronJobs(
-    @Session() user: QuickAuthPayload,
-    @Query('type') type: 'daily' | 'reminder' | 'health' = 'daily',
-    @Res() res: Response,
-  ): Promise<Response> {
-    const adminFids = [16098, 5431];
-    if (!adminFids.includes(user.sub)) {
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'testCronJobs',
-        'Admin access required',
-      );
-    }
-
-    try {
-      switch (type) {
-        case 'daily':
-          await this.brandSchedulerService.handlePeriodEnd();
-          break;
-        case 'reminder':
-          await this.brandSchedulerService.sendDailyVoteReminder();
-          break;
-        case 'health':
-          await this.brandSchedulerService.healthCheck();
-          break;
-        default:
-          return hasError(
-            res,
-            HttpStatus.BAD_REQUEST,
-            'testCronJobs',
-            'Invalid type. Use: daily, reminder, or health',
-          );
-      }
-
-      return hasResponse(res, {
-        message: `${type} cron job executed successfully`,
-        executedAt: new Date().toISOString(),
-        type,
-      });
-    } catch (error) {
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'testCronJobs',
-        `Failed to execute ${type} cron job: ${error.message}`,
       );
     }
   }

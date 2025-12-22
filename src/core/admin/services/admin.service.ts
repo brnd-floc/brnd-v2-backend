@@ -483,6 +483,152 @@ export class AdminService {
   }
 
   /**
+   * Validates brand data for on-chain creation
+   * Checks for conflicts, duplicates, and data integrity
+   */
+  async validateBrandForCreation(prepareMetadataDto: PrepareMetadataDto): Promise<{
+    valid: boolean;
+    message?: string;
+    conflicts?: string[];
+    data?: any;
+  }> {
+    console.log('Validating brand data for creation:', prepareMetadataDto);
+
+    const conflicts: string[] = [];
+
+    try {
+      // 1. Validate required fields
+      if (!prepareMetadataDto.name || prepareMetadataDto.name.trim() === '') {
+        conflicts.push('Brand name is required');
+      }
+
+      if (!prepareMetadataDto.handle || prepareMetadataDto.handle.trim() === '') {
+        conflicts.push('Handle is required');
+      }
+
+      if (!prepareMetadataDto.fid || prepareMetadataDto.fid <= 0) {
+        conflicts.push('Valid FID is required');
+      }
+
+      if (
+        !prepareMetadataDto.walletAddress ||
+        !/^0x[a-fA-F0-9]{40}$/.test(prepareMetadataDto.walletAddress)
+      ) {
+        conflicts.push('Valid wallet address is required (0x format)');
+      }
+
+      if (!prepareMetadataDto.url || prepareMetadataDto.url.trim() === '') {
+        conflicts.push('Website URL is required');
+      }
+
+      if (!prepareMetadataDto.description || prepareMetadataDto.description.trim() === '') {
+        conflicts.push('Description is required');
+      }
+
+      if (!prepareMetadataDto.channelOrProfile || prepareMetadataDto.channelOrProfile.trim() === '') {
+        conflicts.push('Channel or profile is required');
+      }
+
+      // 2. Check for duplicate names
+      const existingBrandByName = await this.brandRepository.findOne({
+        where: { name: prepareMetadataDto.name },
+      });
+
+      if (existingBrandByName) {
+        conflicts.push(`Brand name "${prepareMetadataDto.name}" already exists`);
+      }
+
+      // 3. Check for duplicate handles
+      const existingBrandByHandle = await this.brandRepository.findOne({
+        where: [
+          { onChainHandle: prepareMetadataDto.handle },
+          { name: prepareMetadataDto.handle },
+        ],
+      });
+
+      if (existingBrandByHandle) {
+        conflicts.push(`Handle "${prepareMetadataDto.handle}" already exists`);
+      }
+
+      // 4. Check for duplicate URLs
+      const existingBrandByUrl = await this.brandRepository.findOne({
+        where: { url: prepareMetadataDto.url },
+      });
+
+      if (existingBrandByUrl) {
+        conflicts.push(`Website URL "${prepareMetadataDto.url}" already exists`);
+      }
+
+      // 5. Check for duplicate channel/profile
+      if (prepareMetadataDto.queryType === 0 && prepareMetadataDto.channelOrProfile) {
+        // Channel validation
+        const channelName = prepareMetadataDto.channelOrProfile.startsWith('/')
+          ? prepareMetadataDto.channelOrProfile
+          : `/${prepareMetadataDto.channelOrProfile}`;
+
+        const existingBrandByChannel = await this.brandRepository.findOne({
+          where: { channel: channelName },
+        });
+
+        if (existingBrandByChannel) {
+          conflicts.push(`Channel "${channelName}" already exists`);
+        }
+      } else if (prepareMetadataDto.queryType === 1 && prepareMetadataDto.channelOrProfile) {
+        // Profile validation
+        const profileName = prepareMetadataDto.channelOrProfile.startsWith('@')
+          ? prepareMetadataDto.channelOrProfile
+          : `@${prepareMetadataDto.channelOrProfile}`;
+
+        const existingBrandByProfile = await this.brandRepository.findOne({
+          where: { profile: profileName },
+        });
+
+        if (existingBrandByProfile) {
+          conflicts.push(`Profile "${profileName}" already exists`);
+        }
+      }
+
+      // 6. Validate category exists
+      if (prepareMetadataDto.categoryId) {
+        const category = await this.categoryRepository.findOne({
+          where: { id: prepareMetadataDto.categoryId },
+        });
+
+        if (!category) {
+          conflicts.push(`Category with ID ${prepareMetadataDto.categoryId} does not exist`);
+        }
+      }
+
+      // Return validation result
+      if (conflicts.length > 0) {
+        return {
+          valid: false,
+          message: `Validation failed: ${conflicts.length} conflict(s) found`,
+          conflicts,
+        };
+      }
+
+      return {
+        valid: true,
+        message: 'Brand validation passed successfully',
+        data: {
+          handle: prepareMetadataDto.handle,
+          fid: prepareMetadataDto.fid,
+          walletAddress: prepareMetadataDto.walletAddress,
+          channelOrProfile: prepareMetadataDto.channelOrProfile,
+        },
+      };
+    } catch (error) {
+      console.error('Error during brand validation:', error);
+      return {
+        valid: false,
+        message: `Validation error: ${error.message}`,
+        conflicts: ['Internal validation error'],
+      };
+    }
+  }
+
+  /**
    * Prepares brand metadata for on-chain creation by uploading to IPFS
    * Validates handle uniqueness and returns IPFS hash
    */
