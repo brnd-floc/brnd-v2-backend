@@ -32,4 +32,8 @@ export class BlockchainBrandDto {
   @IsString()
   @IsNotEmpty()
   timestamp: string;
+
+  @IsString()
+  @IsNotEmpty()
+  createdOrUpdated: 'created' | 'updated';
 }

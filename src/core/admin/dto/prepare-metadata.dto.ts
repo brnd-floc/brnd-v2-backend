@@ -15,4 +15,5 @@ export class PrepareMetadataDto {
   handle: string; // Brand handle for on-chain creation
   fid: number; // Farcaster ID for on-chain creation
   walletAddress: string; // Wallet address for on-chain creation (0x format)
+  isEditing: boolean;
 }

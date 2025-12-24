@@ -238,18 +238,8 @@ export class BrandController {
     },
     @Res() res: Response,
   ): Promise<Response> {
-    console.log('=== verifyShare START ===');
-    console.log('Input parameters:', {
-      userFid: user.sub,
-      castHash,
-      voteId,
-      recipientAddress,
-      transactionHash,
-      castedFrom,
-    });
     try {
       if (!voteId) {
-        console.log('❌ Validation failed: Vote ID is required');
         return hasError(
           res,
           HttpStatus.BAD_REQUEST,
@@ -267,10 +257,6 @@ export class BrandController {
       );
 
       if (recipientAddress && !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress)) {
-        console.log(
-          '❌ Validation failed: Invalid recipient address format:',
-          recipientAddress,
-        );
         return hasError(
           res,
           HttpStatus.BAD_REQUEST,
@@ -281,17 +267,9 @@ export class BrandController {
 
       // Validate castHash format if provided
       const hasValidCastHash = castHash && /^0x[a-fA-F0-9]{40}$/.test(castHash);
-      console.log(
-        'Cast hash provided:',
-        hasValidCastHash,
-        'castHash:',
-        castHash,
-      );
 
-      console.log('→ Fetching user from database...');
       const dbUser = await this.userService.getByFid(user.sub);
       if (!dbUser) {
-        console.log('❌ User not found for fid:', user.sub);
         return hasError(
           res,
           HttpStatus.NOT_FOUND,
@@ -299,31 +277,13 @@ export class BrandController {
           'User not found',
         );
       }
-      console.log('✓ User found:', {
-        userId: dbUser.id,
-        fid: dbUser.fid,
-        points: dbUser.points,
-      });
 
-      console.log('→ Fetching vote by transaction hash:', transactionHash);
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
       logger.log('THE VOTE on the verify share IS', vote);
-      console.log(
-        'Vote data:',
-        vote
-          ? {
-              transactionHash: vote.transactionHash,
-              userId: vote.user?.fid,
-              shared: vote.shared,
-              date: vote.date,
-            }
-          : null,
-      );
 
       if (!vote) {
-        console.log('❌ Vote not found for transaction hash:', transactionHash);
         return hasError(
           res,
           HttpStatus.NOT_FOUND,
@@ -333,10 +293,6 @@ export class BrandController {
       }
 
       if (vote.user.fid !== dbUser.fid) {
-        console.log('❌ Vote ownership mismatch:', {
-          voteUserFid: vote.user.fid,
-          dbUserFid: dbUser.fid,
-        });
         return hasError(
           res,
           HttpStatus.FORBIDDEN,
@@ -347,12 +303,7 @@ export class BrandController {
 
       // If vote is already shared, skip verification and just return claim signature
       if (vote.shared) {
-        console.log(
-          '→ Vote has already been shared, skipping verification and generating claim signature only',
-        );
-
         if (!vote.castHash) {
-          console.log('❌ Vote is marked as shared but castHash is missing');
           return hasError(
             res,
             HttpStatus.INTERNAL_SERVER_ERROR,
@@ -364,16 +315,10 @@ export class BrandController {
         // Calculate day from vote date (or use stored day if available)
         const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
         const day = vote.day || Math.floor(voteTimestamp / 86400);
-        console.log('Using stored castHash:', vote.castHash);
-        console.log('Calculated day:', day, 'from vote date:', vote.date);
 
         // Generate claim signature if recipient address is provided
         let claimSignature = null;
         if (recipientAddress) {
-          console.log(
-            '→ Generating claim signature for recipient:',
-            recipientAddress,
-          );
           try {
             claimSignature = await this.rewardService.generateClaimSignature(
               dbUser.fid,
@@ -381,19 +326,9 @@ export class BrandController {
               recipientAddress,
               vote.castHash,
             );
-            console.log('✓ Claim signature generated:', {
-              amount: claimSignature.amount,
-              deadline: claimSignature.deadline,
-              canClaim: claimSignature.canClaim,
-            });
           } catch (claimError) {
-            console.error('❌ Error generating claim signature:', claimError);
             // Do nothing, skip claim sig on error
           }
-        } else {
-          console.log(
-            'No recipient address provided, skipping claim signature generation',
-          );
         }
 
         const responsePayload = {
@@ -417,16 +352,13 @@ export class BrandController {
             : 'Provide recipientAddress to generate claim signature.',
         };
 
-        console.log('=== verifyShare SUCCESS (already shared) ===');
         return hasResponse(res, {
           ...responsePayload,
         });
       }
 
       // Vote is not shared yet, proceed with full verification
-      console.log('→ Vote not yet shared, proceeding with full verification');
       try {
-        console.log('→ Initializing Neynar service...');
         const neynar = new NeynarService();
         let resolvedCastHash = castHash;
         let castData;
@@ -434,17 +366,8 @@ export class BrandController {
         // If castHash is provided and valid, fetch cast directly
         // Otherwise, poll for the cast
         if (hasValidCastHash) {
-          console.log(
-            '→ Cast hash provided - fetching cast by hash:',
-            castHash,
-          );
           castData = await neynar.getCastByHash(castHash);
-          console.log('✓ Cast data retrieved:', {
-            hash: castData.hash,
-            authorFid: castData.author?.fid,
-          });
         } else {
-          console.log('→ Cast hash not provided - starting cast polling...');
           const validEmbedUrls = [
             'https://brnd.land',
             'https://rebrnd.lat',
@@ -454,19 +377,12 @@ export class BrandController {
           ];
 
           const expectedTxHash = vote.transactionHash;
-          console.log('Expected transaction hash:', expectedTxHash);
 
           // Calculate the vote's day (BRND world day)
           const voteTimestamp = Math.floor(
             new Date(vote.date).getTime() / 1000,
           );
           const voteDay = Math.floor(voteTimestamp / 86400);
-          console.log(
-            'Vote day (BRND world):',
-            voteDay,
-            'from vote date:',
-            vote.date,
-          );
 
           let foundCast = null;
           const maxPollAttempts = 10;
@@ -474,11 +390,8 @@ export class BrandController {
 
           // Poll for the cast
           for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-            console.log(`Polling attempt ${attempt + 1}/${maxPollAttempts}`);
             try {
-              console.log('Fetching user casts for fid:', user.sub);
               const casts = await neynar.getUserCasts(user.sub, 10, false);
-              console.log(`Retrieved ${casts.length} casts`);
 
               for (const cast of casts) {
                 // Check if cast is from the same BRND world day as the vote
@@ -489,15 +402,8 @@ export class BrandController {
                 const castDay = Math.floor(castTimestampSeconds / 86400);
 
                 if (castDay !== voteDay) {
-                  console.log(
-                    `Cast ${cast.hash} is from a different day (cast day: ${castDay}, vote day: ${voteDay}, timestamp: ${cast.timestamp})`,
-                  );
                   continue; // Cast is from a different day
                 }
-
-                console.log(
-                  `Checking cast ${cast.hash} (day: ${castDay}, timestamp: ${cast.timestamp}, embeds: ${cast.embeds?.length || 0})`,
-                );
 
                 // Check if cast has the correct embed URL with the transaction hash
                 for (const embed of cast.embeds) {
@@ -507,10 +413,6 @@ export class BrandController {
                       embedUrl.includes(baseUrl),
                     );
 
-                    console.log(
-                      `  Embed URL: ${embedUrl}, hasValidBaseUrl: ${hasValidBaseUrl}`,
-                    );
-
                     if (hasValidBaseUrl && embedUrl.includes('/podium/')) {
                       // Extract transaction hash from URL (handle query params/fragments)
                       const txHashFromEmbed = embedUrl
@@ -518,15 +420,9 @@ export class BrandController {
                         ?.split('?')[0]
                         ?.split('#')[0]
                         ?.trim();
-                      console.log(
-                        `  Extracted tx hash from embed: ${txHashFromEmbed}, expected: ${expectedTxHash}`,
-                      );
                       if (txHashFromEmbed === expectedTxHash) {
                         foundCast = cast;
                         resolvedCastHash = cast.hash;
-                        console.log(
-                          `✓ Found matching cast! Hash: ${resolvedCastHash}`,
-                        );
                         break;
                       }
                     }
@@ -544,23 +440,17 @@ export class BrandController {
 
               // Wait before next poll attempt
               if (attempt < maxPollAttempts - 1) {
-                console.log(`Waiting ${pollInterval}ms before next attempt...`);
                 await new Promise((resolve) =>
                   setTimeout(resolve, pollInterval),
                 );
               }
             } catch (pollError) {
-              console.error(
-                `Error on polling attempt ${attempt + 1}:`,
-                pollError,
-              );
               logger.error('Error polling for cast:', pollError);
               // Continue to next attempt
             }
           }
 
           if (!foundCast) {
-            console.log('❌ Could not find cast after all polling attempts');
             return hasError(
               res,
               HttpStatus.NOT_FOUND,
@@ -570,21 +460,9 @@ export class BrandController {
           }
 
           castData = foundCast;
-          console.log('✓ Cast data retrieved from polling:', {
-            hash: castData.hash,
-            authorFid: castData.author?.fid,
-          });
         }
 
-        console.log('→ Validating cast author...');
-        console.log(
-          'Cast author fid:',
-          castData.author.fid,
-          'User fid:',
-          user.sub,
-        );
         if (castData.author.fid !== user.sub) {
-          console.log('❌ Cast author mismatch');
           return hasError(
             res,
             HttpStatus.FORBIDDEN,
@@ -592,7 +470,6 @@ export class BrandController {
             'Cast was not posted by the authenticated user',
           );
         }
-        console.log('✓ Cast author validated');
 
         const validEmbedUrls = [
           'https://brnd.land',
@@ -602,11 +479,6 @@ export class BrandController {
           'https://brnd-v2-backend-production.up.railway.app',
         ];
 
-        console.log('→ Validating embed URLs...');
-        console.log(
-          'Cast embeds:',
-          castData.embeds.map((e: any) => e.url || 'no url'),
-        );
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {
           if ('url' in embed) {
             return validEmbedUrls.some((baseUrl) =>
@@ -617,7 +489,6 @@ export class BrandController {
         });
 
         if (correctEmbedIndex === -1) {
-          console.log('❌ No valid embed URL found in cast');
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
@@ -625,21 +496,13 @@ export class BrandController {
             'Cast does not contain the correct embed URL',
           );
         }
-        console.log(`✓ Found valid embed at index ${correctEmbedIndex}`);
 
         const correctEmbed = castData.embeds[correctEmbedIndex] as any;
         const correctEmbedUrl = correctEmbed.url;
         const transactionHashFromQueryParam =
           correctEmbedUrl.split('/podium/')[1];
-        console.log('Embed URL:', correctEmbedUrl);
-        console.log(
-          'Transaction hash from embed:',
-          transactionHashFromQueryParam,
-        );
-        console.log('Vote transaction hash:', vote.transactionHash);
 
         if (vote.transactionHash !== transactionHashFromQueryParam) {
-          console.log('❌ Transaction hash mismatch');
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
@@ -647,7 +510,6 @@ export class BrandController {
             'Cast does not contain the correct tx hash',
           );
         }
-        console.log('✓ Transaction hash validated');
 
         await this.brandService.markVoteAsShared(
           vote.transactionHash,
@@ -659,7 +521,7 @@ export class BrandController {
         const updatedVote = await this.brandService.getVoteByTransactionHash(
           vote.transactionHash,
         );
-        
+
         // If vote is not shared after our update, something went wrong
         if (!updatedVote?.shared) {
           return hasError(
@@ -670,68 +532,19 @@ export class BrandController {
           );
         }
 
-        // If vote was already shared when we started (race condition - another request got there first),
-        // skip points and just return claim signature
-        if (vote.shared) {
-          const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
-          const day = Math.floor(voteTimestamp / 86400);
-          
-          let claimSignature = null;
-          if (recipientAddress) {
-            try {
-              claimSignature = await this.rewardService.generateClaimSignature(
-                dbUser.fid,
-                day,
-                recipientAddress,
-                resolvedCastHash,
-              );
-            } catch (claimError) {
-              // Skip on error
-            }
-          }
-
-          return hasResponse(res, {
-            verified: true,
-            pointsAwarded: 0,
-            newTotalPoints: dbUser.points,
-            message: 'Vote was already shared. Claim signature generated.',
-            day,
-            castHash: resolvedCastHash,
-            claimSignature: claimSignature
-              ? {
-                  signature: claimSignature.signature,
-                  amount: claimSignature.amount,
-                  deadline: claimSignature.deadline,
-                  nonce: claimSignature.nonce,
-                  canClaim: claimSignature.canClaim,
-                }
-              : null,
-            note: recipientAddress
-              ? 'Claim signature generated. You can now claim your reward on-chain.'
-              : 'Provide recipientAddress to generate claim signature.',
-          });
-        }
-
         const updatedUser = await this.userService.addPoints(dbUser.id, 3);
 
         const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
         const day = Math.floor(voteTimestamp / 86400);
-        console.log('Calculated day:', day, 'from vote date:', vote.date);
 
-        console.log('→ Verifying share for reward...');
         await this.rewardService.verifyShareForReward(
           dbUser.fid,
           day,
           resolvedCastHash,
         );
-        console.log('✓ Share verified for reward');
 
         let claimSignature = null;
         if (recipientAddress) {
-          console.log(
-            '→ Generating claim signature for recipient:',
-            recipientAddress,
-          );
           try {
             claimSignature = await this.rewardService.generateClaimSignature(
               dbUser.fid,
@@ -739,19 +552,9 @@ export class BrandController {
               recipientAddress,
               resolvedCastHash,
             );
-            console.log('✓ Claim signature generated:', {
-              amount: claimSignature.amount,
-              deadline: claimSignature.deadline,
-              canClaim: claimSignature.canClaim,
-            });
           } catch (claimError) {
-            console.error('❌ Error generating claim signature:', claimError);
             // Do nothing, skip claim sig on error
           }
-        } else {
-          console.log(
-            'No recipient address provided, skipping claim signature generation',
-          );
         }
 
         const responsePayload = {
@@ -775,67 +578,41 @@ export class BrandController {
             : 'Provide recipientAddress to generate claim signature.',
         };
 
-        console.log('→ Preparing response payload:', {
-          verified: responsePayload.verified,
-          pointsAwarded: responsePayload.pointsAwarded,
-          newTotalPoints: responsePayload.newTotalPoints,
-          day: responsePayload.day,
-          castHash: responsePayload.castHash,
-          hasClaimSignature: !!responsePayload.claimSignature,
-        });
-
         try {
-          console.log('→ Attempting to post reply cast...');
           const pointsForVote = 6 + updatedUser.brndPowerLevel * 3;
           const config = getConfig();
           if (config.neynar.apiKey && config.neynar.signerUuid) {
             const replyText = `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`;
-            console.log('Reply text:', replyText);
-            const replyResponse = await fetch(
-              'https://api.neynar.com/v2/farcaster/cast',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-api-key': config.neynar.apiKey,
-                },
-                body: JSON.stringify({
-                  signer_uuid: config.neynar.signerUuid,
-                  embeds: [
-                    {
-                      cast_id: {
-                        hash: resolvedCastHash,
-                        fid: castData.author.fid,
-                      },
-                    },
-                  ],
-
-                  text: replyText,
-                }),
+            await fetch('https://api.neynar.com/v2/farcaster/cast', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.neynar.apiKey,
               },
-            );
-            console.log(
-              '✓ Reply cast posted successfully. Status:',
-              replyResponse.status,
-            );
-          } else {
-            console.log('⚠ Neynar config missing, skipping reply cast');
+              body: JSON.stringify({
+                signer_uuid: config.neynar.signerUuid,
+                embeds: [
+                  {
+                    cast_id: {
+                      hash: resolvedCastHash,
+                      fid: castData.author.fid,
+                    },
+                  },
+                ],
+
+                text: replyText,
+              }),
+            });
           }
         } catch (replyError) {
-          console.error('❌ Error posting reply cast:', replyError);
           // Do nothing if reply failed
         }
 
-        console.log('=== verifyShare SUCCESS ===');
         return hasResponse(res, {
           ...responsePayload,
         });
       } catch (neynarError) {
-        console.error('❌ Neynar error:', neynarError);
-        console.error('Error message:', neynarError.message);
-        console.error('Error stack:', neynarError.stack);
         if (neynarError.message?.includes('Cast not found')) {
-          console.log('→ Cast not found error detected');
           return hasError(
             res,
             HttpStatus.NOT_FOUND,
@@ -852,9 +629,6 @@ export class BrandController {
         );
       }
     } catch (error) {
-      console.error('❌ Unexpected error in verifyShare:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
       return hasError(
         res,
         HttpStatus.INTERNAL_SERVER_ERROR,

@@ -491,7 +491,6 @@ export class AdminController {
     }
   }
 
-
   /**
    * Prepares brand metadata for on-chain creation
    * Validates data first, then uploads metadata to IPFS and returns hash for smart contract
@@ -521,8 +520,9 @@ export class AdminController {
     try {
       // Step 1: Validate brand data first
       console.log('Validating brand data...');
-      const validation = await this.adminService.validateBrandForCreation(prepareMetadataDto);
-      
+      const validation =
+        await this.adminService.validateBrandForCreation(prepareMetadataDto);
+
       if (!validation.valid) {
         console.log('Brand validation failed:', validation);
         return hasResponse(res, {
@@ -533,10 +533,13 @@ export class AdminController {
         });
       }
 
-      console.log('Brand validation passed, proceeding to metadata preparation...');
+      console.log(
+        'Brand validation passed, proceeding to metadata preparation...',
+      );
 
       // Step 2: Prepare metadata and upload to IPFS
-      const result = await this.adminService.prepareBrandMetadata(prepareMetadataDto);
+      const result =
+        await this.adminService.prepareBrandMetadata(prepareMetadataDto);
       console.log('Brand metadata prepared successfully:', result);
 
       return hasResponse(res, {
@@ -546,7 +549,8 @@ export class AdminController {
         handle: result.handle,
         fid: result.fid,
         walletAddress: result.walletAddress,
-        message: 'Brand validation passed and metadata uploaded to IPFS. Use the metadataHash to create the brand on-chain.',
+        message:
+          'Brand validation passed and metadata uploaded to IPFS. Use the metadataHash to create the brand on-chain.',
       });
     } catch (error) {
       console.error('Error in prepareBrandMetadata:', error);

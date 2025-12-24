@@ -499,6 +499,7 @@ export class AdminService {
     prepareMetadataDto: PrepareMetadataDto,
   ): Promise<{
     valid: boolean;
+    isEditing: boolean;
     message?: string;
     conflicts?: string[];
     data?: any;
@@ -514,25 +515,25 @@ export class AdminService {
       }
 
       if (
-        !prepareMetadataDto.handle ||
-        prepareMetadataDto.handle.trim() === ''
+        !prepareMetadataDto.isEditing &&
+        (!prepareMetadataDto.handle || prepareMetadataDto.handle.trim() === '')
       ) {
         conflicts.push('Handle is required');
       }
 
-      if (!prepareMetadataDto.fid || prepareMetadataDto.fid <= 0) {
+      if (
+        !prepareMetadataDto.isEditing &&
+        (!prepareMetadataDto.fid || prepareMetadataDto.fid <= 0)
+      ) {
         conflicts.push('Valid FID is required');
       }
 
       if (
-        !prepareMetadataDto.walletAddress ||
-        !/^0x[a-fA-F0-9]{40}$/.test(prepareMetadataDto.walletAddress)
+        !prepareMetadataDto.isEditing &&
+        (!prepareMetadataDto.walletAddress ||
+          !/^0x[a-fA-F0-9]{40}$/.test(prepareMetadataDto.walletAddress))
       ) {
         conflicts.push('Valid wallet address is required (0x format)');
-      }
-
-      if (!prepareMetadataDto.url || prepareMetadataDto.url.trim() === '') {
-        conflicts.push('Website URL is required');
       }
 
       if (
@@ -554,7 +555,7 @@ export class AdminService {
         where: { name: prepareMetadataDto.name },
       });
 
-      if (existingBrandByName) {
+      if (!prepareMetadataDto.isEditing && existingBrandByName) {
         conflicts.push(
           `Brand name "${prepareMetadataDto.name}" already exists`,
         );
@@ -568,7 +569,7 @@ export class AdminService {
         ],
       });
 
-      if (existingBrandByHandle) {
+      if (!prepareMetadataDto.isEditing && existingBrandByHandle) {
         conflicts.push(`Handle "${prepareMetadataDto.handle}" already exists`);
       }
 
@@ -577,7 +578,7 @@ export class AdminService {
         where: { url: prepareMetadataDto.url },
       });
 
-      if (existingBrandByUrl) {
+      if (!prepareMetadataDto.isEditing && existingBrandByUrl) {
         conflicts.push(
           `Website URL "${prepareMetadataDto.url}" already exists`,
         );
@@ -585,6 +586,7 @@ export class AdminService {
 
       // 5. Check for duplicate channel/profile
       if (
+        !prepareMetadataDto.isEditing &&
         prepareMetadataDto.queryType === 0 &&
         prepareMetadataDto.channelOrProfile
       ) {
@@ -601,6 +603,7 @@ export class AdminService {
           conflicts.push(`Channel "${channelName}" already exists`);
         }
       } else if (
+        !prepareMetadataDto.isEditing &&
         prepareMetadataDto.queryType === 1 &&
         prepareMetadataDto.channelOrProfile
       ) {
@@ -620,14 +623,17 @@ export class AdminService {
 
       // 6. Validate category exists
       if (prepareMetadataDto.categoryId) {
-        const category = await this.categoryRepository.findOne({
+        let category = await this.categoryRepository.findOne({
           where: { id: prepareMetadataDto.categoryId },
         });
 
         if (!category) {
-          conflicts.push(
-            `Category with ID ${prepareMetadataDto.categoryId} does not exist`,
-          );
+          // If the category does not exist, create it on the fly and continue
+          category = this.categoryRepository.create({
+            id: prepareMetadataDto.categoryId,
+            name: `${prepareMetadataDto.categoryId.toString()}`,
+          });
+          await this.categoryRepository.save(category);
         }
       }
 
@@ -635,6 +641,7 @@ export class AdminService {
       if (conflicts.length > 0) {
         return {
           valid: false,
+          isEditing: prepareMetadataDto.isEditing,
           message: `Validation failed: ${conflicts.length} conflict(s) found`,
           conflicts,
         };
@@ -642,6 +649,7 @@ export class AdminService {
 
       return {
         valid: true,
+        isEditing: prepareMetadataDto.isEditing,
         message: 'Brand validation passed successfully',
         data: {
           handle: prepareMetadataDto.handle,
@@ -654,6 +662,7 @@ export class AdminService {
       console.error('Error during brand validation:', error);
       return {
         valid: false,
+        isEditing: prepareMetadataDto.isEditing,
         message: `Validation error: ${error.message}`,
         conflicts: ['Internal validation error'],
       };
@@ -669,6 +678,7 @@ export class AdminService {
     handle: string;
     fid: number;
     walletAddress: string;
+    isEditing: boolean;
   }> {
     console.log(
       'Preparing brand metadata for IPFS upload:',
@@ -699,7 +709,7 @@ export class AdminService {
       ],
     });
 
-    if (existingBrand) {
+    if (!prepareMetadataDto.isEditing && existingBrand) {
       throw new Error(
         `Handle "${prepareMetadataDto.handle}" already exists. Please choose a different handle.`,
       );
@@ -736,18 +746,19 @@ export class AdminService {
       handle: prepareMetadataDto.handle,
       fid: prepareMetadataDto.fid,
       walletAddress: prepareMetadataDto.walletAddress,
+      isEditing: prepareMetadataDto.isEditing,
     };
   }
 
   /**
-   * Creates a brand from blockchain data sent by the indexer
-   * Queries the smart contract for metadata and creates brand in database
+   * Creates or updates a brand from blockchain data sent by the indexer
+   * Queries the smart contract for metadata and creates/updates brand in database
    */
-  async createBrandFromBlockchain(
+  async createOrUpdateBrandFromBlockchain(
     blockchainBrandDto: BlockchainBrandDto,
   ): Promise<Brand> {
     console.log(
-      '📋 [INDEXER] Creating brand from blockchain data:',
+      `📋 [INDEXER] ${blockchainBrandDto.createdOrUpdated === 'created' ? 'Creating' : 'Updating'} brand from blockchain data:`,
       blockchainBrandDto,
     );
 
@@ -757,9 +768,10 @@ export class AdminService {
         where: { onChainId: blockchainBrandDto.id },
       });
 
-      if (existingBrand) {
+      // If brand exists and event is 'created', just return existing brand
+      if (existingBrand && blockchainBrandDto.createdOrUpdated === 'created') {
         console.log(
-          `⚠️  [INDEXER] Brand with onChainId ${blockchainBrandDto.id} already exists`,
+          `⚠️  [INDEXER] Brand with onChainId ${blockchainBrandDto.id} already exists, returning existing brand`,
         );
         return existingBrand;
       }
@@ -821,7 +833,51 @@ export class AdminService {
         );
       }
 
-      // Create brand entity
+      // If brand exists and event is 'updated', update existing brand
+      if (existingBrand && blockchainBrandDto.createdOrUpdated === 'updated') {
+        console.log(
+          `🔄 [INDEXER] Updating existing brand with onChainId ${blockchainBrandDto.id}`,
+        );
+
+        // Update on-chain data (source of truth)
+        existingBrand.onChainHandle = contractBrand.handle;
+        existingBrand.onChainFid = contractBrand.fid;
+        existingBrand.onChainWalletAddress = contractBrand.walletAddress;
+        existingBrand.metadataHash = contractBrand.metadataHash;
+
+        // Update metadata from IPFS (can be updated)
+        existingBrand.name = metadata.name || contractBrand.handle;
+        existingBrand.url = metadata.url || '';
+        existingBrand.warpcastUrl = metadata.warpcastUrl || metadata.url || '';
+        existingBrand.description = metadata.description || '';
+        existingBrand.imageUrl = metadata.imageUrl || '';
+        existingBrand.profile = metadata.handle || profile;
+        existingBrand.channel = channel;
+        existingBrand.queryType = queryType;
+        existingBrand.followerCount = followerCount;
+        existingBrand.category = category;
+
+        // Note: We preserve scoring fields (score, stateScore, etc.) on update
+        // These are managed separately and shouldn't be reset
+
+        const updatedBrand = await this.brandRepository.save(existingBrand);
+
+        console.log(
+          '✅ [INDEXER] Brand updated successfully from blockchain:',
+          {
+            id: updatedBrand.id,
+            onChainId: updatedBrand.onChainId,
+            name: updatedBrand.name,
+            handle: updatedBrand.onChainHandle,
+            fid: updatedBrand.onChainFid,
+            metadataHash: updatedBrand.metadataHash,
+          },
+        );
+
+        return updatedBrand;
+      }
+
+      // Create new brand entity
       const brand = this.brandRepository.create({
         // On-chain data (source of truth)
         onChainId: blockchainBrandDto.id,
@@ -876,11 +932,11 @@ export class AdminService {
       return savedBrand;
     } catch (error) {
       console.error(
-        '❌ [INDEXER] Failed to create brand from blockchain:',
+        `❌ [INDEXER] Failed to ${blockchainBrandDto.createdOrUpdated === 'created' ? 'create' : 'update'} brand from blockchain:`,
         error,
       );
       throw new Error(
-        `Failed to create brand from blockchain: ${error.message}`,
+        `Failed to ${blockchainBrandDto.createdOrUpdated === 'created' ? 'create' : 'update'} brand from blockchain: ${error.message}`,
       );
     }
   }
