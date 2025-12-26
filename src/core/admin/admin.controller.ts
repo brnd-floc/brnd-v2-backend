@@ -37,7 +37,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 import { getConfig } from '../../security/config';
 
-const adminFids = [5431, 16098];
+const adminFids = [5431, 16098, 8109];
 
 @ApiTags('admin-service')
 @Controller('admin-service')
@@ -356,7 +356,7 @@ export class AdminController {
     @Res() res: Response,
   ) {
     // Check admin authorization (your existing pattern)
-    const adminFids = [39278, 16098];
+    const adminFids = [39278, 16098, 8109];
     if (!adminFids.includes(user.sub)) {
       return hasError(
         res,

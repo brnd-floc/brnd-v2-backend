@@ -895,7 +895,7 @@ export class BrandController {
     @Session() user: QuickAuthPayload,
     @Res() res: Response,
   ): Promise<Response> {
-    const adminFids = [16098, 5431];
+    const adminFids = [16098, 5431, 8109];
     if (!adminFids.includes(user.sub)) {
       return hasError(
         res,
