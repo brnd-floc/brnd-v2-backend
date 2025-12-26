@@ -281,7 +281,6 @@ export class BrandController {
       const vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
-      logger.log('THE VOTE on the verify share IS', vote);
 
       if (!vote) {
         return hasError(

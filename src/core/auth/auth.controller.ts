@@ -155,7 +155,7 @@ export class AuthController {
         // isEligible: true if user has an airdrop score
         // snapshotExists: true if an airdrop snapshot has been created
         // If snapshotExists: true and isEligible: false, user is not eligible
-        airdrop: userData.airdrop,
+        // airdrop: userData.airdrop,
 
         // Meta
         createdAt: userData.user.createdAt,

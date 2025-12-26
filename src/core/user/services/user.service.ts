@@ -672,16 +672,22 @@ export class UserService {
             id: true,
             name: true,
             imageUrl: true,
+            channel: true,
+            profile: true,
           },
           brand2: {
             id: true,
             name: true,
             imageUrl: true,
+            channel: true,
+            profile: true,
           },
           brand3: {
             id: true,
             name: true,
             imageUrl: true,
+            channel: true,
+            profile: true,
           },
         },
       });
@@ -1273,21 +1279,21 @@ export class UserService {
       castHash?: string;
       day?: number;
     };
-    airdrop: {
-      isEligible: boolean;
-      airdropScore?: number;
-      tokenAllocation?: number;
-      percentage?: number;
-      leaderboardPosition?: number;
-      snapshotExists: boolean;
-      latestSnapshot?: {
-        id: number;
-        merkleRoot: string;
-        totalUsers: number;
-        totalTokens: string;
-        snapshotDate: Date;
-      };
-    };
+    // airdrop: {
+    //   isEligible: boolean;
+    //   airdropScore?: number;
+    //   tokenAllocation?: number;
+    //   percentage?: number;
+    //   leaderboardPosition?: number;
+    //   snapshotExists: boolean;
+    //   latestSnapshot?: {
+    //     id: number;
+    //     merkleRoot: string;
+    //     totalUsers: number;
+    //     totalTokens: string;
+    //     snapshotDate: Date;
+    //   };
+    // };
   }> {
     try {
       // Get user with all relations
@@ -1301,12 +1307,11 @@ export class UserService {
       }
 
       // Get today's vote status, contextual transaction data, and airdrop info
-      const [todaysVoteStatus, contextualTransaction, airdropInfo] =
-        await Promise.all([
-          this.getTodaysVoteStatus(fid),
-          this.getContextualTransactionData(fid),
-          this.getUserAirdropInfo(fid),
-        ]);
+      const [todaysVoteStatus, contextualTransaction] = await Promise.all([
+        this.getTodaysVoteStatus(fid),
+        this.getContextualTransactionData(fid),
+        //this.getUserAirdropInfo(fid),
+      ]);
 
       // Calculate precise boolean flags
       const votedToday = todaysVoteStatus?.hasVoted || false;
@@ -1334,7 +1339,7 @@ export class UserService {
         favoriteBrand: user.favoriteBrand,
         todaysVoteStatus,
         contextualTransaction,
-        airdrop: airdropInfo,
+        // airdrop: airdropInfo,
       };
     } catch (error) {
       logger.error('Error getting comprehensive user data:', error);
