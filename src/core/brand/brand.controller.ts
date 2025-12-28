@@ -278,9 +278,26 @@ export class BrandController {
         );
       }
 
-      const vote = await this.brandService.getVoteByTransactionHash(
+      // Try to fetch vote with retries (5 additional attempts with 2 second delays)
+      let vote = await this.brandService.getVoteByTransactionHash(
         transactionHash as string,
       );
+
+      if (!vote) {
+        const maxRetries = 5;
+        const retryDelay = 2000; // 2 seconds
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          vote = await this.brandService.getVoteByTransactionHash(
+            transactionHash as string,
+          );
+
+          if (vote) {
+            break; // Vote found, exit retry loop
+          }
+        }
+      }
 
       if (!vote) {
         return hasError(
