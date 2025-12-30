@@ -392,13 +392,13 @@ export class UserService {
    * @param {User['id']} userId - The ID of the user whose vote history is to be retrieved.
    * @param {number} [pageId=1] - The page number for pagination.
    * @param {number} [limit=15] - The number of records to retrieve per page.
-   * @returns {Promise<{ count: number; data: Record<string, UserBrandVotes[]> }>} A promise that resolves to an object containing the total count of votes and a record where keys are dates and values are arrays of votes for that day.
+   * @returns {Promise<{ count: number; data: Record<string, any> }>} A promise that resolves to an object containing the total count of votes and a record where keys are dates and values are vote objects for that day.
    */
   async getVotesHistory(
     userId: User['id'],
     pageId: number = 1,
     limit: number = 15,
-  ): Promise<{ count: number; data: Record<string, UserBrandVotes[]> }> {
+  ): Promise<{ count: number; data: Record<string, any> }> {
     const [votes, count] = await this.userBrandVotesRepository.findAndCount({
       where: { user: { id: userId } },
       relations: ['brand1', 'brand2', 'brand3'],
@@ -407,54 +407,41 @@ export class UserService {
       take: limit,
     });
 
-    // Return empty response with correct structure if no votes found
     if (count === 0) {
+      return { count: 0, data: {} };
+    }
+
+    const getBrandData = (brand: any) => {
+      if (!brand) return null;
       return {
-        count: 0,
-        data: {},
+        id: brand.id,
+        name: brand.name,
+        imageUrl: brand.imageUrl,
+        score: brand.score,
+        stateScore: brand.stateScore,
+      };
+    };
+
+    const data: Record<string, any> = {};
+    for (const vote of votes) {
+      // Skip votes where all brands are null
+      if (!vote.brand1 || !vote.brand2 || !vote.brand3) {
+        continue;
+      }
+
+      const dateKey = vote.date.toISOString().split('T')[0];
+      const brand1 = getBrandData(vote.brand1);
+      const brand2 = getBrandData(vote.brand2);
+      const brand3 = getBrandData(vote.brand3);
+
+      data[dateKey] = {
+        brand1,
+        brand2,
+        brand3,
       };
     }
 
-    const groupedVotes = votes.reduce((acc, vote) => {
-      const dateKey = vote.date.toISOString().split('T')[0]; // Group by date (YYYY-MM-DD)
-      if (!acc[dateKey]) {
-        acc[dateKey] = {};
-      }
-      acc[dateKey] = {
-        transactionHash: vote.transactionHash,
-        date: vote.date,
-        brand1: {
-          id: vote.brand1.id,
-          name: vote.brand1.name,
-          imageUrl: vote.brand1.imageUrl,
-          score: vote.brand1.score,
-          stateScore: vote.brand1.stateScore,
-          ranking: vote.brand1.ranking,
-        },
-        brand2: {
-          id: vote.brand2.id,
-          name: vote.brand2.name,
-          imageUrl: vote.brand2.imageUrl,
-          score: vote.brand2.score,
-          stateScore: vote.brand2.stateScore,
-          ranking: vote.brand2.ranking,
-        },
-        brand3: {
-          id: vote.brand3.id,
-          name: vote.brand3.name,
-          imageUrl: vote.brand3.imageUrl,
-          score: vote.brand3.score,
-          stateScore: vote.brand3.stateScore,
-          ranking: vote.brand3.ranking,
-        },
-      };
-      return acc;
-    }, {});
-
-    return {
-      count,
-      data: groupedVotes,
-    };
+    return { count, data };
   }
 
   /**
