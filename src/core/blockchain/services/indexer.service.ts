@@ -486,9 +486,9 @@ export class IndexerService {
       let cloudinaryUrl: string | null = null;
       try {
         // TODO: UNCOMMENT THIS FOR PRODUCTION
-        // cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
-        //   voteData.transactionHash,
-        // );
+        cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
+          voteData.transactionHash,
+        );
       } catch (error) {
         logger.error(`❌ [INDEXER] Error generating podium image:`, error);
       }
