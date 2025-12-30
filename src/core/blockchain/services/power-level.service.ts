@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { User } from '../../../models';
 import { BlockchainService } from './blockchain.service';
 import { logger } from '../../../main';
+import { getConfig } from '../../../security/config';
 
 export interface PowerLevel {
   id: number;
@@ -422,6 +423,9 @@ export class PowerLevelService {
       await this.userRepository.update(user.id, { maxDailyStreak });
     }
 
+    // Fetch collectibles count from the indexer API
+    const collectibles = await this.fetchCollectiblesCount(user.fid);
+
     return {
       followingBrnd: followStatus.followingBrnd,
       followingFloc: followStatus.followingFloc,
@@ -431,8 +435,54 @@ export class PowerLevelService {
       maxDailyStreak: maxDailyStreak || 0,
       totalPodiums: user.totalPodiums || totalPodiums,
       votedBrandsCount: user.votedBrandsCount || 0,
-      collectibles: 0, // TODO: Implement collectibles counting
+      collectibles,
     };
+  }
+
+  private async fetchCollectiblesCount(fid: number): Promise<number> {
+    try {
+      const config = getConfig();
+      const apiRoute = config.collectiblesIndexer?.apiRoute;
+      const apiKey = config.collectiblesIndexer?.apiKey;
+
+      if (!apiRoute || !apiKey) {
+        logger.warn(
+          `⚠️ [POWER LEVEL] Collectibles indexer API route or key not configured`,
+        );
+        return 0;
+      }
+
+      const url = `${apiRoute}/brnd-airdrop/collected-casts?collectorFid=${fid}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-API-KEY': apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        logger.error(
+          `❌ [POWER LEVEL] Failed to fetch collectibles for FID ${fid}: ${response.status} ${response.statusText}`,
+        );
+        return 0;
+      }
+
+      const data = await response.json();
+      const count = data?.count || data?.collectedCasts?.length || 0;
+
+      logger.log(
+        `✅ [POWER LEVEL] Fetched ${count} collectibles for FID ${fid}`,
+      );
+
+      return count;
+    } catch (error) {
+      logger.error(
+        `❌ [POWER LEVEL] Error fetching collectibles for FID ${fid}:`,
+        error,
+      );
+      return 0;
+    }
   }
 
   private async calculateMaxStreakFromHistory(user: User): Promise<number> {
