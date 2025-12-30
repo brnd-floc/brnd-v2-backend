@@ -1398,7 +1398,12 @@ export class UserService {
 
       // Fetch Neynar score if not set
       let neynarScore = user.neynarScore;
-      if (neynarScore === 0.0) {
+      console.log('THE NEYNAR SCORE IS', neynarScore);
+      if (
+        neynarScore == null ||
+        neynarScore == 0.0 ||
+        neynarScore.toString() == '0.00'
+      ) {
         try {
           logger.log(`🔍 [USER PROFILE] Fetching Neynar score for FID: ${fid}`);
           const neynarUserInfo = await this.getNeynarUserInfo(fid);
@@ -1408,10 +1413,13 @@ export class UserService {
             neynarScore = neynarUserInfo.score;
 
             // Update user record with the calculated score
-            await this.userRepository.update({ id: user.id }, { neynarScore });
+            await this.userRepository.update(
+              { id: user.id },
+              { neynarScore, photoUrl: neynarUserInfo.pfp_url },
+            );
 
             logger.log(
-              `✅ [USER PROFILE] Updated Neynar score for FID ${fid}: ${neynarScore}`,
+              `✅ [USER PROFILE] Updated Neynar score for FID ${fid}: ${neynarScore} and photo URL: ${neynarUserInfo.pfp_url}`,
             );
           } else {
             logger.warn(
