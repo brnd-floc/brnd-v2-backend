@@ -14,13 +14,13 @@ help:
 	@echo "# =============================================================================="
 	@echo ""
 	@echo "Main Commands:"
-	@echo "  make migrate          - Full migration: verify, clean, schema, data, and airdrop"
+	@echo "  make migrate          - Full migration: verify, clean, schema, and data"
 	@echo "                        (Interactive: Press Enter at each step to proceed)"
 	@echo "  make migrate-verify   - Verify production DB is read-only"
 	@echo "  make migrate-clean    - Wipe the new database completely (requires 'yes')"
 	@echo "  make migrate-schema   - Apply new schema to clean database"
 	@echo "  make migrate-data     - Copy data from production to new database"
-	@echo "  make migrate-airdrop  - Calculate airdrop scores for top 1111 users"
+	@echo ""
 	@echo ""
 	@echo "Utility Commands:"
 	@echo "  make install          - Install dependencies using bun"
@@ -72,7 +72,6 @@ migrate:
 	@echo "✓ Migration completed successfully!"
 	@echo "# =============================================================================="
 	@echo "The new database has been populated with production data using the new schema."
-	@echo "Airdrop scores have been calculated for the top 1111 users."
 	@echo ""
 	@echo "Press Enter to exit..."
 	@bash -c 'read -r dummy'
@@ -147,9 +146,6 @@ migrate-schema:
 	@echo "    - user_brand_votes"
 	@echo "    - user_daily_actions"
 	@echo "  • New entities (will be empty):"
-	@echo "    - airdrop_scores"
-	@echo "    - airdrop_snapshots"
-	@echo "    - airdrop_leaves"
 	@echo "    - reward_claims"
 	@echo ""
 	@echo "Press Enter to start schema application..."
@@ -192,59 +188,6 @@ migrate-data:
 	@echo ""
 	@echo "✓ Data migration completed successfully"
 
-# =============================================================================
-# Step 5: Calculate Airdrop Scores
-# =============================================================================
-
-.PHONY: migrate-airdrop
-migrate-airdrop:
-	@echo "# =============================================================================="
-	@echo "Step 5: Calculating Airdrop Scores"
-	@echo "# =============================================================================="
-	@echo ""
-	@echo "This step will calculate airdrop scores for the top 1111 users based on:"
-	@echo "  • Base points from voting and activity"
-	@echo "  • Multipliers (follows, channel interaction, BRND holdings, etc.)"
-	@echo "  • Final token allocation percentages"
-	@echo ""
-	@echo "This ensures the leaderboard is ready with calculated scores after migration."
-	@echo ""
-	@echo "Press Enter to start airdrop calculation..."
-	@bash -c 'read -r dummy'
-	@echo ""
-	@bun run scripts/calculate-airdrop.ts || (echo "" && echo "❌ ERROR: Airdrop calculation failed!" && echo "The migration was successful, but airdrop scores could not be calculated." && echo "You can run this manually later with: make migrate-airdrop" && exit 1)
-	@echo ""
-	@echo "✓ Airdrop scores calculated successfully"
-
-# =============================================================================
-# Calculate Airdrop Scores for Top 1111 Users
-# =============================================================================
-# This target calls the backend API to calculate airdrop scores for all users
-# and establish the top 1111 leaderboard with clarity
-
-.PHONY: calculate-airdrop-api
-calculate-airdrop-api:
-	@echo "# =============================================================================="
-	@echo "Calculating Airdrop Scores for Top 1111 Users via API"
-	@echo "# =============================================================================="
-	@echo ""
-	@echo "This will call the backend API to calculate airdrop scores for all users."
-	@echo "This process will:"
-	@echo "  • Calculate base points from voting and activity"
-	@echo "  • Apply multipliers (follows, channel interaction, BRND holdings, etc.)"
-	@echo "  • Establish final token allocation percentages"
-	@echo "  • Set up the top 1111 users leaderboard"
-	@echo ""
-	@echo ""
-	@echo ">>> Calling API endpoint: GET /airdrop-service/calculate-all-users"
-	@echo ">>> This may take several minutes depending on the number of users..."
-	@echo ""
-	@curl -X GET "http://localhost:3000/airdrop-service/calculate-all-users?batchSize=10" \
-		-H "Content-Type: application/json" \
-		-w "\n>>> Response Status: %{http_code}\n>>> Total Time: %{time_total}s\n" \
-		-s --show-error || (echo "" && echo "❌ ERROR: Failed to calculate airdrop scores!" && echo "Make sure the backend server is running on port 3000" && exit 1)
-	@echo ""
-	@echo "✓ Airdrop score calculation completed successfully"
 
 # =============================================================================
 # Development Commands

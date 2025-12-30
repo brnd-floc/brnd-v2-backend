@@ -572,12 +572,13 @@ export class BrandController {
             // Do nothing, skip claim sig on error
           }
         }
+        const pointsForVote = 3 + updatedUser.brndPowerLevel * 3;
 
         const responsePayload = {
           verified: true,
-          pointsAwarded: 3,
+          pointsAwarded: pointsForVote,
           newTotalPoints: updatedUser.points,
-          message: 'Share verified successfully! 3 points awarded.',
+          message: `Share verified successfully! ${pointsForVote} points awarded.`,
           day,
           castHash: resolvedCastHash,
           claimSignature: claimSignature
@@ -595,7 +596,6 @@ export class BrandController {
         };
 
         try {
-          const pointsForVote = 6 + updatedUser.brndPowerLevel * 3;
           const config = getConfig();
           if (config.neynar.apiKey && config.neynar.signerUuid) {
             const replyText = `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`;

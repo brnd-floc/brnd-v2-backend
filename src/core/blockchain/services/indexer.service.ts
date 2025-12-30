@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, Not, IsNull } from 'typeorm';
 
 import { Brand, User, UserBrandVotes } from '../../../models';
 import { UserService } from '../../user/services';
@@ -246,6 +246,52 @@ export class IndexerService {
         return;
       }
 
+      // Calculate day from timestamp (block.timestamp / 86400)
+      const day = Math.floor(timestamp / 86400);
+
+      // Check if there's a placeholder vote created from a claim that came before this vote
+      // Placeholder votes have null brands and a claimTxHash
+      const placeholderVote = await this.userBrandVotesRepository.findOne({
+        where: {
+          user: { id: user.id },
+          day: day,
+          brand1: null, // Placeholder indicator
+          claimTxHash: Not(IsNull()), // Has claim data
+        },
+        relations: ['user'],
+      });
+
+      let placeholderClaimData: {
+        claimedAt?: Date;
+        claimTxHash?: string;
+        castHash?: string;
+        shared?: boolean;
+        shareVerified?: boolean;
+        shareVerifiedAt?: Date;
+      } | null = null;
+
+      if (placeholderVote) {
+        logger.log(
+          `🔄 [INDEXER] Found placeholder vote from claim event, will merge with actual vote: ${placeholderVote.transactionHash}`,
+        );
+        // Save claim data from placeholder before deleting it
+        placeholderClaimData = {
+          claimedAt: placeholderVote.claimedAt,
+          claimTxHash: placeholderVote.claimTxHash,
+          castHash: placeholderVote.castHash,
+          shared: placeholderVote.shared,
+          shareVerified: placeholderVote.shareVerified,
+          shareVerifiedAt: placeholderVote.shareVerifiedAt,
+        };
+        // Delete the placeholder since we'll create the real vote with the correct transactionHash
+        await this.userBrandVotesRepository.delete({
+          transactionHash: placeholderVote.transactionHash,
+        });
+        logger.log(
+          `🗑️ [INDEXER] Deleted placeholder vote: ${placeholderVote.transactionHash}`,
+        );
+      }
+
       // Then check if user already voted this day (business rule)
       const dayStart = new Date(voteDate);
       dayStart.setHours(0, 0, 0, 0);
@@ -267,42 +313,14 @@ export class IndexerService {
         return;
       }
 
-      // Calculate day from timestamp (block.timestamp / 86400)
-      const day = Math.floor(timestamp / 86400);
-      // Calculate brndPaid right away based on user's brndPowerLevel
-      let brndPaid: number;
-      switch (user.brndPowerLevel) {
-        case 0:
-          brndPaid = 100;
-          break;
-        case 1:
-          brndPaid = 150;
-          break;
-        case 2:
-          brndPaid = 200;
-          break;
-        case 3:
-          brndPaid = 300;
-          break;
-        case 4:
-          brndPaid = 400;
-          break;
-        case 5:
-          brndPaid = 500;
-          break;
-        case 6:
-          brndPaid = 600;
-          break;
-        case 7:
-          brndPaid = 700;
-          break;
-        case 8:
-          brndPaid = 800;
-          break;
-      }
+      // Use actual on-chain cost from the vote event
+      // voteData.cost is in wei (e.g., "100000000000000000000" for 100 BRND)
+      // Convert to BRND units by dividing by 10^18
+      const WEI_PER_BRND = BigInt(10 ** 18);
+      const costInWei = BigInt(voteData.cost);
+      const brndPaid = Number(costInWei / WEI_PER_BRND);
       // Calculate reward amount in wei (brndPaid is in BRND units, convert to wei then multiply by 10)
       // 1 BRND = 10^18 wei, so reward = brndPaid * 10^18 * 10 = brndPaid * 10^19
-      const WEI_PER_BRND = BigInt(10 ** 18);
       const REWARD_MULTIPLIER = BigInt(10);
       const rewardAmount = (
         BigInt(brndPaid) *
@@ -311,6 +329,7 @@ export class IndexerService {
       ).toString();
 
       // Create the vote record
+      // If we found a placeholder, merge the claim data into the vote
       const vote = this.userBrandVotesRepository.create({
         id: voteData.transactionHash, // Use transaction hash as id
         user: { id: user.id },
@@ -318,17 +337,34 @@ export class IndexerService {
         brand2: { id: voteData.brandIds[1] },
         brand3: { id: voteData.brandIds[2] },
         date: voteDate,
-        shared: false, // Will be updated if user shares their vote
-        castHash: null, // Keep null for now, will be populated when user shares
+        shared: placeholderClaimData?.shared || false, // Use placeholder data if available
+        castHash: placeholderClaimData?.castHash || null, // Use placeholder castHash if available
         transactionHash: voteData.transactionHash, // Store blockchain transaction hash
         brndPaidWhenCreatingPodium: brndPaid,
         rewardAmount: rewardAmount, // Store reward amount in wei (cost * 10 in wei)
         day: day, // Store blockchain day
-        shareVerified: false, // Will be updated when user shares
+        shareVerified: placeholderClaimData?.shareVerified || false, // Use placeholder data if available
+        shareVerifiedAt: placeholderClaimData?.shareVerifiedAt || null, // Use placeholder data if available
+        claimedAt: placeholderClaimData?.claimedAt || null, // Use placeholder data if available
+        claimTxHash: placeholderClaimData?.claimTxHash || null, // Use placeholder data if available
       });
 
       await this.userBrandVotesRepository.save(vote);
-      logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
+
+      if (placeholderClaimData) {
+        logger.log(
+          `✅ [INDEXER] Saved vote and merged placeholder claim data: ${voteData.id}`,
+        );
+        // Add level-based leaderboard points for the claim (since we merged claim data)
+        // User gets brndPowerLevel * 3 additional points
+        const claimLeaderboardPoints = user.brndPowerLevel * 3;
+        await this.userService.addPoints(user.id, claimLeaderboardPoints);
+        logger.log(
+          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${user.id} (level ${user.brndPowerLevel})`,
+        );
+      } else {
+        logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
+      }
 
       // Update brand scores (60, 30, 10 points for 1st, 2nd, 3rd place)
       // Always update score, but conditionally update scoreDay, scoreWeek and scoreMonth
@@ -443,16 +479,16 @@ export class IndexerService {
       // Then update calculated fields (which depend on the updated totalVotes)
       await this.userService.updateUserCalculatedFields(user.id);
 
-      // Calculate leaderboard points based on BRND power level
-      // Level 0 -> 3, Level 1 -> 6, Level 2 -> 9, etc.
-      // Formula: (level + 1) * 3
-      const leaderboardPoints = (user.brndPowerLevel + 1) * 3;
+      // Calculate leaderboard points for voting (flat 3 points regardless of level)
+      // Level-based points are awarded separately when reward is claimed
+      const leaderboardPoints = 3;
       await this.userService.addPoints(user.id, leaderboardPoints);
       let cloudinaryUrl: string | null = null;
       try {
-        cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
-          voteData.transactionHash,
-        );
+        // TODO: UNCOMMENT THIS FOR PRODUCTION
+        // cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
+        //   voteData.transactionHash,
+        // );
       } catch (error) {
         logger.error(`❌ [INDEXER] Error generating podium image:`, error);
       }
@@ -510,13 +546,25 @@ export class IndexerService {
         return;
       }
 
-      // Find the corresponding UserBrandVotes record by user FID and day
-      const userVote = await this.userBrandVotesRepository.findOne({
+      // Find the corresponding UserBrandVotes record
+      // First try by castHash (most reliable)
+      let userVote = await this.userBrandVotesRepository.findOne({
         where: {
           castHash: claimData.castHash,
         },
         relations: ['user'],
       });
+
+      // If not found by castHash, try by user FID and day (in case castHash isn't set yet)
+      if (!userVote) {
+        userVote = await this.userBrandVotesRepository.findOne({
+          where: {
+            user: { fid: claimData.fid },
+            day: dayNumber,
+          },
+          relations: ['user'],
+        });
+      }
 
       if (userVote) {
         // Update existing vote record with claim data
@@ -539,11 +587,22 @@ export class IndexerService {
         logger.log(
           `✅ [INDEXER] Updated UserBrandVotes: ${userVote.transactionHash}`,
         );
+
+        // Add level-based leaderboard points when reward is claimed
+        // User gets brndPowerLevel * 3 additional points
+        const claimLeaderboardPoints = userVote.user.brndPowerLevel * 3;
+        await this.userService.addPoints(
+          userVote.user.id,
+          claimLeaderboardPoints,
+        );
+        logger.log(
+          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${userVote.user.id} (level ${userVote.user.brndPowerLevel})`,
+        );
       } else {
-        // This shouldn't normally happen - claim should come after vote
-        // But create a placeholder record just in case
+        // Edge case: Claim event came before vote event
+        // Create a placeholder vote record that will be updated when the vote event arrives
         logger.warn(
-          `⚠️ [INDEXER] No existing vote found for FID ${claimData.fid}, castHash ${claimData.castHash}. Creating placeholder.`,
+          `⚠️ [INDEXER] No existing vote found for FID ${claimData.fid}, castHash ${claimData.castHash}. Creating placeholder vote record.`,
         );
 
         // Find or create user by FID
@@ -592,13 +651,12 @@ export class IndexerService {
         }
 
         // Create placeholder vote record with claim data
-        // Use claim transaction hash as primary key since vote transaction doesn't exist
+        // Use claim transaction hash as primary key since vote transaction doesn't exist yet
         // This is an edge case where claim came before vote (shouldn't normally happen)
         const placeholderVote = this.userBrandVotesRepository.create({
-          id: claimData.transactionHash, // Use transaction hash as id
           transactionHash: claimData.transactionHash, // Use claim tx hash as primary key
           user: { id: user.id },
-          // These will be null since we don't have vote data
+          // These will be null since we don't have vote data yet
           brand1: null,
           brand2: null,
           brand3: null,

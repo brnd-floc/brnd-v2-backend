@@ -122,10 +122,22 @@ export class Brand {
   @Column({ nullable: true, length: 42 })
   walletAddress: string;
 
-  @Column({ type: 'decimal', precision: 36, scale: 18, default: '0' })
+  @Column({
+    type: 'decimal',
+    precision: 36,
+    scale: 18,
+    default: '0',
+    nullable: true,
+  })
   totalBrndAwarded: string;
 
-  @Column({ type: 'decimal', precision: 36, scale: 18, default: '0' })
+  @Column({
+    type: 'decimal',
+    precision: 36,
+    scale: 18,
+    default: '0',
+    nullable: true,
+  })
   availableBrnd: string;
 
   @Column({ nullable: true })
@@ -147,7 +159,7 @@ export class Brand {
   metadataHash: string;
 
   // Contract Upload Tracking
-  @Column({ default: false })
+  @Column({ default: false, nullable: true })
   isUploadedToContract: boolean;
 
   @OneToMany('UserBrandVotes', 'brand1')

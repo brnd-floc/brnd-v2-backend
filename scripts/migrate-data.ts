@@ -14,8 +14,7 @@
  * 6. UserBrandVotes (depends on Users and Brands)
  * 7. UserDailyActions (depends on Users)
  *
- * Note: New entities (AirdropScore, AirdropSnapshot, AirdropLeaf, RewardClaim)
- * will remain empty as they don't exist in production.
+ * Note: New entities (RewardClaim) will remain empty as they don't exist in production.
  */
 
 import { DataSource } from 'typeorm';
@@ -126,6 +125,9 @@ async function migrateData() {
       password: prodConfig.password,
     });
     console.log('✓ Connected to production database');
+    console.log(`  Host: ${prodConfig.host}:${prodConfig.port}`);
+    console.log(`  Database: ${prodConfig.database}`);
+    console.log(`  User: ${prodConfig.user}`);
 
     // Connect to new database (TypeORM)
     console.log('Connecting to new database...');
@@ -159,6 +161,9 @@ async function migrateData() {
 
     await newDataSource.initialize();
     console.log('✓ Connected to new database');
+    console.log(`  Host: ${newConfig.host}:${newConfig.port}`);
+    console.log(`  Database: ${newConfig.database}`);
+    console.log(`  User: ${newConfig.username}`);
     console.log('');
 
     // ========================================================================
@@ -226,16 +231,65 @@ async function migrateData() {
       // Get category IDs for foreign key mapping
       const categoryRepo = newDataSource.getRepository(Category);
       const allCategories = await categoryRepo.find();
-      const categoryMap = new Map(allCategories.map((cat) => [cat.id, cat.id])); // Map ID to ID for validation
+      const categoryMap = new Map(
+        allCategories.map((cat) => {
+          const id = Number(cat.id);
+          return [id, id];
+        }),
+      ); // Map ID to ID for validation (ensure numbers)
+
+      console.log(
+        `  Found ${allCategories.length} categories in new database for foreign key validation`,
+      );
+      if (allCategories.length > 0) {
+        const categoryIds = allCategories
+          .map((c) => Number(c.id))
+          .sort((a, b) => a - b);
+        console.log(
+          `     Category IDs (as numbers): ${categoryIds.join(', ')}`,
+        );
+        // Verify categoryMap is built correctly
+        console.log(
+          `     CategoryMap keys: ${Array.from(categoryMap.keys())
+            .sort((a, b) => a - b)
+            .join(', ')}`,
+        );
+        // Test lookup
+        categoryIds.forEach((id) => {
+          if (!categoryMap.has(id)) {
+            console.error(
+              `     ⚠️  WARNING: Category ID ${id} not found in categoryMap!`,
+            );
+          }
+        });
+      }
+
+      if (allCategories.length === 0) {
+        console.warn(
+          '  ⚠️  WARNING: No categories found in new database! All brands will be migrated with categoryId = NULL.',
+        );
+      }
 
       // Use raw SQL for much faster bulk insert - process all at once since it's only 402 brands
       const batchSize = prodBrands.length; // Insert all brands in one go
       let processed = 0;
+      let invalidCategoryCount = 0;
+      const invalidCategoryIds = new Set<number>();
+      const actualCategoryIdsInSQL: (number | 'NULL')[] = []; // Track what we're actually inserting
+      const allCategoryIdsInSQL: (number | 'NULL')[] = []; // Track ALL categoryIds for validation
 
       // Build VALUES clause for batch insert
       const values = prodBrands
-        .map((brand) => {
+        .map((brand, index) => {
           processed++;
+
+          // Debug first 5 brands to see what's happening
+          if (index < 5) {
+            const rawCatId = brand.categoryId || brand.category_id;
+            console.log(
+              `  [DEBUG Brand ${brand.id}] rawCategoryId: ${rawCatId}, type: ${typeof rawCatId}`,
+            );
+          }
 
           // Escape values for SQL safety
           const escapeValue = (val: any) => {
@@ -287,10 +341,70 @@ async function migrateData() {
             return 'NOW()'; // Fallback to current timestamp
           };
 
-          // Get category ID (foreign key)
-          const categoryId = brand.categoryId || brand.category_id;
-          const validCategoryId =
-            categoryId && categoryMap.has(categoryId) ? categoryId : null;
+          // Get category ID (foreign key) - ALWAYS default to null if there's any issue
+          let validCategoryId: number | null = null;
+
+          const rawCategoryId =
+            brand.categoryId !== null && brand.categoryId !== undefined
+              ? brand.categoryId
+              : brand.category_id !== null && brand.category_id !== undefined
+                ? brand.category_id
+                : null;
+
+          // Only process if we have a raw category ID that's not empty
+          if (
+            rawCategoryId !== null &&
+            rawCategoryId !== undefined &&
+            rawCategoryId !== '' &&
+            String(rawCategoryId).trim() !== ''
+          ) {
+            const categoryIdNum = Number(rawCategoryId);
+            // Triple-check: must be valid number, integer, positive, AND exist in categoryMap
+            const isValid =
+              !isNaN(categoryIdNum) &&
+              Number.isInteger(categoryIdNum) &&
+              categoryIdNum > 0 &&
+              categoryMap.has(categoryIdNum);
+
+            if (isValid) {
+              validCategoryId = categoryIdNum;
+            } else {
+              // Track invalid category IDs for reporting
+              invalidCategoryCount++;
+              if (!isNaN(categoryIdNum) && categoryIdNum > 0) {
+                invalidCategoryIds.add(categoryIdNum);
+              }
+              // CRITICAL: Always set to null for invalid IDs
+              validCategoryId = null;
+            }
+          }
+          // CRITICAL: Ensure validCategoryId is ALWAYS null if not valid
+          // Double-check one more time before using
+          if (
+            validCategoryId !== null &&
+            (!categoryMap.has(validCategoryId) || validCategoryId <= 0)
+          ) {
+            validCategoryId = null;
+          }
+
+          // Determine final categoryId value for SQL
+          let finalCategoryIdForSQL: number | 'NULL';
+          if (validCategoryId === null || validCategoryId === undefined) {
+            finalCategoryIdForSQL = 'NULL';
+          } else if (
+            !categoryMap.has(validCategoryId) ||
+            validCategoryId <= 0
+          ) {
+            finalCategoryIdForSQL = 'NULL';
+          } else {
+            finalCategoryIdForSQL = validCategoryId;
+          }
+
+          // Track what we're actually inserting
+          allCategoryIdsInSQL.push(finalCategoryIdForSQL);
+          if (index < 20) {
+            actualCategoryIdsInSQL.push(finalCategoryIdForSQL);
+          }
 
           // Transform ranking from INT to STRING
           const ranking =
@@ -299,55 +413,168 @@ async function migrateData() {
               : '0';
 
           return `(
-          ${escapeValue(brand.id)},
-          ${escapeValue(brand.name)},
-          ${escapeValue(brand.url)},
-          ${escapeValue(brand.warpcastUrl || brand.warpcast_url)},
-          ${escapeValue(brand.description)},
-          ${escapeValue(brand.followerCount || brand.follower_count || 0)},
-          ${escapeValue(brand.imageUrl || brand.image_url)},
-          ${escapeValue(brand.profile)},
-          ${escapeValue(brand.channel)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(0)},
-          ${escapeValue(brand.banned || 0)},
-          ${escapeValue(brand.queryType || brand.query_type || 0)},
-          ${escapeValue(brand.currentRanking || brand.current_ranking || 0)},
-          ${validCategoryId ? validCategoryId : 'NULL'},
-          NULL,
-          '0',
-          '0',
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          0,
-          NULL,
-          NULL,
-          NULL,
-          ${formatDate(brand.createdAt || brand.created_at)},
-          ${formatDate(brand.updatedAt || brand.updated_at)}
-        )`;
+                ${escapeValue(brand.id)},
+                ${escapeValue(brand.name)},
+                ${escapeValue(brand.url)},
+                ${escapeValue(brand.warpcastUrl || brand.warpcast_url)},
+                ${escapeValue(brand.description)},
+                ${escapeValue(brand.followerCount || brand.follower_count || 0)},
+                ${escapeValue(brand.imageUrl || brand.image_url)},
+                ${escapeValue(brand.profile)},
+                ${escapeValue(brand.channel)},
+                ${escapeValue(ranking)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(0)},
+                ${escapeValue(brand.banned || 0)},
+                ${escapeValue(brand.queryType || brand.query_type || 0)},
+                ${escapeValue(brand.currentRanking || brand.current_ranking || 0)},
+                ${(() => {
+                  if (finalCategoryIdForSQL === 'NULL') {
+                    return 'NULL';
+                  }
+                  if (typeof finalCategoryIdForSQL !== 'number') {
+                    console.error(
+                      `  ❌ CRITICAL: Brand ${brand.id} has non-numeric finalCategoryIdForSQL: ${finalCategoryIdForSQL} (type: ${typeof finalCategoryIdForSQL})`,
+                    );
+                    return 'NULL';
+                  }
+                  if (finalCategoryIdForSQL <= 0) {
+                    console.error(
+                      `  ❌ CRITICAL: Brand ${brand.id} has invalid finalCategoryIdForSQL (<= 0): ${finalCategoryIdForSQL}`,
+                    );
+                    return 'NULL';
+                  }
+                  if (!categoryMap.has(finalCategoryIdForSQL)) {
+                    console.error(
+                      `  ❌ CRITICAL: Brand ${brand.id} has finalCategoryIdForSQL not in categoryMap: ${finalCategoryIdForSQL}`,
+                    );
+                    console.error(
+                      `     Available category IDs: ${Array.from(
+                        categoryMap.keys(),
+                      )
+                        .sort((a, b) => a - b)
+                        .join(', ')}`,
+                    );
+                    return 'NULL';
+                  }
+                  return finalCategoryIdForSQL;
+                })()},
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                0,
+                NULL,
+                NULL,
+                NULL,
+                ${formatDate(brand.createdAt || brand.created_at)},
+                ${formatDate(brand.updatedAt || brand.updated_at)}
+              )`;
         })
         .join(',\n');
 
+      // Report invalid category IDs
+      if (invalidCategoryCount > 0) {
+        console.warn(
+          `  ⚠️  WARNING: Found ${invalidCategoryCount} brands with invalid categoryIds that will be set to NULL`,
+        );
+        console.warn(
+          `     Invalid category IDs from production: ${Array.from(
+            invalidCategoryIds,
+          )
+            .sort((a, b) => a - b)
+            .join(', ')}`,
+        );
+        console.warn(
+          `     Available category IDs in new database: ${Array.from(
+            categoryMap.keys(),
+          )
+            .sort((a, b) => a - b)
+            .join(', ')}`,
+        );
+        console.warn(
+          `     These brands will be migrated with categoryId = NULL`,
+        );
+      }
+
+      // Report what categoryId values we're actually inserting
+      if (actualCategoryIdsInSQL.length > 0) {
+        console.log(
+          `  Actual categoryId values being inserted (first 20): ${actualCategoryIdsInSQL.join(', ')}`,
+        );
+      }
+
+      // CRITICAL: Validate ALL categoryIds before executing SQL
+      const invalidInSQL = allCategoryIdsInSQL.filter(
+        (id) =>
+          id !== 'NULL' &&
+          (typeof id !== 'number' || !categoryMap.has(id) || id <= 0),
+      );
+
+      if (invalidInSQL.length > 0) {
+        console.error(
+          `  ❌ ERROR: Found ${invalidInSQL.length} invalid categoryIds in SQL!`,
+        );
+        console.error(
+          `     Invalid IDs: ${Array.from(new Set(invalidInSQL)).slice(0, 20).join(', ')}${invalidInSQL.length > 20 ? '...' : ''}`,
+        );
+        console.error(
+          `     Available category IDs: ${Array.from(categoryMap.keys())
+            .sort((a, b) => a - b)
+            .join(', ')}`,
+        );
+        throw new Error(
+          `Cannot proceed: Found ${invalidInSQL.length} invalid categoryIds in generated SQL`,
+        );
+      }
+
+      // Also check for any numeric values that aren't in the map
+      const numericIds = allCategoryIdsInSQL.filter(
+        (id) => typeof id === 'number',
+      ) as number[];
+      const invalidNumericIds = numericIds.filter((id) => !categoryMap.has(id));
+      if (invalidNumericIds.length > 0) {
+        console.error(
+          `  ❌ ERROR: Found ${invalidNumericIds.length} numeric categoryIds not in categoryMap!`,
+        );
+        console.error(
+          `     Invalid numeric IDs: ${Array.from(new Set(invalidNumericIds)).slice(0, 20).join(', ')}${invalidNumericIds.length > 20 ? '...' : ''}`,
+        );
+        throw new Error(
+          `Cannot proceed: Found ${invalidNumericIds.length} categoryIds not in categoryMap`,
+        );
+      }
+
+      console.log(
+        `  ✓ Validated all ${allCategoryIdsInSQL.length} categoryIds in tracking array - all are valid or NULL`,
+      );
+
+      // Validation already done in tracking array and template check
+      // The template has a final safety check that will catch any invalid values
+      console.log(
+        `  Column count: 39, Value count: ${values.split(',').length / prodBrands.length}`,
+      );
       const insertSQL = `
         INSERT INTO brands (
           id, name, url, warpcastUrl, description, followerCount, imageUrl,
-          profile, channel, ranking, score, stateScore, scoreWeek, stateScoreWeek,
-          rankingWeek, scoreMonth, stateScoreMonth, rankingMonth, bonusPoints,
-          banned, queryType, currentRanking, categoryId, walletAddress,
-          totalBrndAwarded, availableBrnd, onChainCreatedAt, onChainId,
+          profile, channel, ranking, score, stateScore, scoreDay, stateScoreDay,
+          scoreWeek, stateScoreWeek, rankingWeek, scoreMonth, stateScoreMonth,
+          rankingMonth, bonusPoints, banned, queryType, currentRanking, categoryId,
+          walletAddress, totalBrndAwarded, availableBrnd, onChainCreatedAt, onChainId,
           onChainFid, onChainHandle, onChainWalletAddress, metadataHash,
           isUploadedToContract, founderFid, ticker, contractAddress, createdAt, updatedAt
         ) VALUES ${values}
@@ -703,6 +930,8 @@ async function migrateData() {
               NULL,
               NULL,
               NULL,
+              NULL,
+              NULL,
               NULL
             )`;
             })
@@ -712,7 +941,7 @@ async function migrateData() {
             INSERT INTO user_brand_votes (
               transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, shared, castHash,
               brndPaidWhenCreatingPodium, rewardAmount, day, shareVerified, shareVerifiedAt,
-              signatureGeneratedAt, nonce, claimedAt, claimTxHash
+              signatureGeneratedAt, nonce, claimedAt, claimTxHash, podiumImageUrl, castedFromFid
             ) VALUES ${values}
           `;
 
@@ -992,9 +1221,8 @@ async function migrateData() {
     );
     console.log('');
     console.log(
-      'Note: New entities (AirdropScore, AirdropSnapshot, AirdropLeaf, RewardClaim)',
+      'Note: New entities (RewardClaim) remain empty as they do not exist in production.',
     );
-    console.log('      remain empty as they do not exist in production.');
     console.log('');
   } catch (error: any) {
     console.error('\n❌ ERROR: Data migration failed:');
