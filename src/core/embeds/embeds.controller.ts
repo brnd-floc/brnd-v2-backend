@@ -20,34 +20,6 @@ export class EmbedsController {
 
   constructor(private readonly embedsService: EmbedsService) {}
 
-  @Get('/podium/:transactionHash')
-  async getPodiumByTransactionHash(
-    @Param('transactionHash') transactionHash: string,
-    @Res() res: Response,
-  ): Promise<Response> {
-    try {
-      const embedHtml =
-        await this.embedsService.generatePodiumEmbedByTransactionHash(
-          transactionHash,
-        );
-      if (!embedHtml) {
-        return hasError(
-          res,
-          HttpStatus.NOT_FOUND,
-          'getPodiumByTransactionHash',
-          'Podium not found',
-        );
-      }
-      return res.send(embedHtml);
-    } catch (error) {
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'getPodiumByTransactionHash',
-        error.message,
-      );
-    }
-  }
   /**
    * Generate dynamic embed for podium sharing
    * URL: /embeds/podium/:voteId
@@ -60,7 +32,8 @@ export class EmbedsController {
     try {
       this.logger.log(`Generating podium embed for vote ID: ${voteId}`);
 
-      const embedHtml = await this.embedsService.generatePodiumEmbed(voteId);
+      const embedHtml =
+        await this.embedsService.generatePodiumEmbedByTransactionHash(voteId);
 
       if (!embedHtml) {
         return hasError(

@@ -33,9 +33,11 @@ export class EmbedsService {
         where: { transactionHash: transactionHash },
         relations: ['user', 'brand1', 'brand2', 'brand3'],
       });
+
       if (!vote) {
         this.logger.warn(`Vote not found: ${transactionHash}`);
-        return null;
+        // Return a default embed instead of null
+        return this.generateDefaultPodiumEmbed(transactionHash);
       }
 
       const primaryImageUrl =
@@ -55,7 +57,8 @@ export class EmbedsService {
         `Error generating podium embed for ${transactionHash}:`,
         error,
       );
-      return null;
+      // Return default embed on error instead of null
+      return this.generateDefaultPodiumEmbed(transactionHash);
     }
   }
 
@@ -86,36 +89,6 @@ export class EmbedsService {
     }
 
     return this.fallbackImageUrl;
-  }
-
-  /**
-   * Generate dynamic embed HTML for podium sharing
-   */
-  async generatePodiumEmbed(voteId: string): Promise<string | null> {
-    try {
-      // Get the vote with all related data
-      const vote = await this.votesRepository.findOne({
-        where: { transactionHash: voteId },
-        relations: ['user', 'brand1', 'brand2', 'brand3'],
-      });
-
-      if (!vote) {
-        this.logger.warn(`Vote not found: ${voteId}`);
-        return null;
-      }
-
-      const embedData: EmbedData = {
-        title: `BRND Podium`,
-        description: `${vote.user.username}'s BRND Podium`,
-        imageUrl:
-          'https://github.com/jpfraneto/images/blob/main/dynamic.png?raw=true',
-        targetUrl: `https://brnd.land`,
-      };
-      return this.generateEmbedHtml(embedData, 'podium');
-    } catch (error) {
-      this.logger.error(`Error generating podium embed for ${voteId}:`, error);
-      return null;
-    }
   }
 
   /**
@@ -161,9 +134,8 @@ export class EmbedsService {
 
       const embedData: EmbedData = {
         title: `${brand.name} on BRND`,
-        description: `${brand.description} | Score: ${brand.score} points | Category: ${brand.category?.name || 'General'}`,
-        imageUrl:
-          'https://github.com/jpfraneto/images/blob/main/dynamic.png?raw=true',
+        description: `The page for ${brand.name} on BRND`,
+        imageUrl: 'https://brnd.land/image.png',
         targetUrl: `https://brnd.land/brand/${brandId}`,
       };
 
@@ -715,5 +687,18 @@ export class EmbedsService {
       this.logger.error('Error calculating user rank:', error);
       return 0;
     }
+  }
+
+  /**
+   * Generate default embed when vote is not found
+   */
+  private generateDefaultPodiumEmbed(transactionHash: string): string {
+    const embedData: EmbedData = {
+      title: `BRND`,
+      description: `BRND Podium`,
+      imageUrl: 'https://brnd.land/image.png',
+      targetUrl: `https://brnd.land`,
+    };
+    return this.generateEmbedHtml(embedData, 'podium');
   }
 }
