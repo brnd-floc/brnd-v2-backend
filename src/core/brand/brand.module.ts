@@ -1,5 +1,5 @@
 // Dependencies
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 // Controllers
@@ -7,6 +7,7 @@ import { BrandController } from './brand.controller';
 
 // Services
 import { BrandService } from './services';
+import { BrandMetricsService } from './services/brand-metrics.service';
 import { UserService } from '../user/services';
 import { BrandSeederService } from './services/brand-seeding.service';
 import { AdminService } from '../admin/services/admin.service';
@@ -40,13 +41,14 @@ import { NotificationModule } from '../notification/notification.module';
       AirdropScore,
       AirdropSnapshot,
     ]),
-    AuthModule,
-    BlockchainModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => BlockchainModule),
     NotificationModule,
   ],
   controllers: [BrandController],
   providers: [
     BrandService,
+    BrandMetricsService,
     UserService,
     BrandSeederService,
     AdminService,

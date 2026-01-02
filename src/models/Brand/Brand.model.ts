@@ -182,4 +182,7 @@ export class Brand {
 
   @Column({ nullable: true })
   contractAddress: string;
+
+  @Column({ nullable: true, default: 0 })
+  uniqueVotersCount: number;
 }

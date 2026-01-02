@@ -8,6 +8,7 @@ import { Brand, UserBrandVotes } from '../../../models';
 
 // Services
 import { UserService } from '../../user/services';
+import { BrandMetricsService } from './brand-metrics.service';
 import { User } from '../../../security/decorators';
 import NeynarService from '../../../utils/neynar';
 import { getConfig } from '../../../security/config';
@@ -18,6 +19,7 @@ import { BrandTimePeriod } from '../brand.controller';
 
 @Injectable()
 export class BrandService {
+  private readonly logger = new Logger(BrandService.name);
   private readonly config = getConfig();
 
   constructor(
@@ -28,6 +30,7 @@ export class BrandService {
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
 
     private readonly userService: UserService,
+    private readonly brandMetricsService: BrandMetricsService,
   ) {}
 
   // Add these methods to your BrandService (brand.service.ts)
@@ -1243,6 +1246,15 @@ export class BrandService {
 
     await this.userService.addPoints(user.id, 3);
     await this.updateBrandScores(brandIds);
+
+    // Update brand metrics asynchronously after vote
+    setImmediate(() => {
+      Promise.all(brandIds.map(brandId => 
+        this.brandMetricsService.updateBrandMetrics(brandId)
+      )).catch(error => {
+        this.logger.error('Failed to update brand metrics after vote:', error);
+      });
+    });
 
     return { ...savedVote, bot_cast_hash };
   }

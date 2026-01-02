@@ -9,12 +9,14 @@ import { RewardService } from './services/reward.service';
 import { CastVerificationService } from './services/cast-verification.service';
 import { ContractUploadService } from './services/contract-upload.service';
 import { IndexerService } from './services/indexer.service';
+import { DataRepairService } from './services/data-repair.service';
+import { BrandSyncService } from './services/brand-sync.service';
 import { UserService } from '../user/services';
-import { BrandService } from '../brand/services';
 import { AdminService } from '../admin/services/admin.service';
 import { IpfsService } from '../../utils/ipfs.service';
 import { AuthModule } from '../auth/auth.module';
 import { EmbedsModule } from '../embeds/embeds.module';
+import { BrandModule } from '../brand/brand.module';
 
 import {
   User,
@@ -38,6 +40,7 @@ import {
       AirdropScore,
     ]),
     forwardRef(() => AuthModule),
+    forwardRef(() => BrandModule),
     EmbedsModule,
   ],
   controllers: [BlockchainController],
@@ -49,8 +52,9 @@ import {
     CastVerificationService,
     ContractUploadService,
     IndexerService,
+    DataRepairService,
+    BrandSyncService,
     UserService,
-    BrandService,
     AdminService,
     IpfsService,
   ],
@@ -62,6 +66,8 @@ import {
     CastVerificationService,
     ContractUploadService,
     IndexerService,
+    DataRepairService,
+    BrandSyncService,
   ],
 })
 export class BlockchainModule {}
