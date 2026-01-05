@@ -469,6 +469,10 @@ export class IndexerService {
 
       logger.log(`✅ [INDEXER] Updated brand scores for vote: ${voteData.id}`);
 
+      // Optional: Queue ranking update for affected brands (lightweight)
+      // Uncomment if you want near real-time ranking updates
+      // this.queueRankingUpdate([voteData.brandIds[0], voteData.brandIds[1], voteData.brandIds[2]]);
+
       // Update user's last vote timestamp and day FIRST
       await this.userRepository.update(user.id, {
         lastVoteTimestamp: voteDate,

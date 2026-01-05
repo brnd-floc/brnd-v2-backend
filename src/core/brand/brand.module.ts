@@ -8,6 +8,7 @@ import { BrandController } from './brand.controller';
 // Services
 import { BrandService } from './services';
 import { BrandMetricsService } from './services/brand-metrics.service';
+import { BrandRankingService } from './services/brand-ranking.service';
 import { UserService } from '../user/services';
 import { BrandSeederService } from './services/brand-seeding.service';
 import { AdminService } from '../admin/services/admin.service';
@@ -49,12 +50,13 @@ import { NotificationModule } from '../notification/notification.module';
   providers: [
     BrandService,
     BrandMetricsService,
+    BrandRankingService,
     UserService,
     BrandSeederService,
     AdminService,
     BrandSchedulerService,
     IpfsService,
   ],
-  exports: [BrandService],
+  exports: [BrandService, BrandRankingService],
 })
 export class BrandModule {}

@@ -23,7 +23,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "restore-brand-names": "ts-node restore-brand-names.ts",
     "sync-votes": "ts-node scripts/sync-votes.ts",
-    "sync-votes:bun": "bun run scripts/sync-votes.ts"
+    "sync-votes:bun": "bun run scripts/sync-votes.ts",
+    "update-rankings": "ts-node scripts/update-global-rankings.ts",
+    "update-rankings:dry": "ts-node scripts/update-global-rankings.ts --dry-run"
   },
   "dependencies": {
     "@farcaster/auth-client": "^0.1.1",

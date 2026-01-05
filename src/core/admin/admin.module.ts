@@ -17,6 +17,7 @@ import { BlockchainModule } from '../blockchain/blockchain.module';
 import { AirdropModule } from '../airdrop/airdrop.module';
 import { EmbedsModule } from '../embeds/embeds.module';
 import { NotificationModule } from '../notification/notification.module';
+import { BrandModule } from '../brand/brand.module';
 import { IpfsService } from '../../utils/ipfs.service';
 
 @Module({
@@ -27,6 +28,7 @@ import { IpfsService } from '../../utils/ipfs.service';
     AirdropModule,
     EmbedsModule,
     NotificationModule,
+    BrandModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, IpfsService],

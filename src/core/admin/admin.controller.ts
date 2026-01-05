@@ -18,6 +18,7 @@ import { ContractUploadService } from '../blockchain/services/contract-upload.se
 import { AirdropService } from '../airdrop/services/airdrop.service';
 import { PodiumService } from '../embeds/services/podium.service';
 import { FarcasterNotificationService } from '../notification/services/farcaster-notification.service';
+import { BrandRankingService } from '../brand/services/brand-ranking.service';
 import {
   CreateBrandDto,
   UpdateBrandDto,
@@ -48,6 +49,7 @@ export class AdminController {
     private readonly airdropService: AirdropService,
     private readonly podiumService: PodiumService,
     private readonly farcasterNotificationService: FarcasterNotificationService,
+    private readonly brandRankingService: BrandRankingService,
   ) {
     console.log('AdminController initialized');
   }
