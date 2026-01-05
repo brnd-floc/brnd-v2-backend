@@ -40,9 +40,7 @@ export class EmbedsService {
         return this.generateDefaultPodiumEmbed(transactionHash);
       }
 
-      const primaryImageUrl =
-        vote.podiumImageUrl ||
-        `https://res.cloudinary.com/dkjfbaniw/image/upload/podiums/${transactionHash}.png`;
+      const primaryImageUrl = `https://embeds-sigma.vercel.app/podium/${transactionHash}`;
       const imageUrl = await this.ensureImageUrl(primaryImageUrl);
 
       const embedData: EmbedData = {
@@ -135,7 +133,7 @@ export class EmbedsService {
       const embedData: EmbedData = {
         title: `${brand.name} on BRND`,
         description: `The page for ${brand.name} on BRND`,
-        imageUrl: 'https://brnd.land/image.png',
+        imageUrl: `https://embeds-sigma.vercel.app/brand/${brandId}`,
         targetUrl: `https://brnd.land/brand/${brandId}`,
       };
 

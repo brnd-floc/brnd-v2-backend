@@ -483,19 +483,16 @@ export class IndexerService {
       // Level-based points are awarded separately when reward is claimed
       const leaderboardPoints = 3;
       await this.userService.addPoints(user.id, leaderboardPoints);
-      let cloudinaryUrl: string | null = null;
-      try {
-        // TODO: UNCOMMENT THIS FOR PRODUCTION
-        cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
-          voteData.transactionHash,
-        );
-      } catch (error) {
-        logger.error(`❌ [INDEXER] Error generating podium image:`, error);
-      }
+      // let cloudinaryUrl: string | null = null;
+      // try {
+      //   cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
+      //     voteData.transactionHash,
+      //   );
+      // } catch (error) {
+      //   logger.error(`❌ [INDEXER] Error generating podium image:`, error);
+      // }
 
-      logger.log(
-        `✅ [INDEXER] Vote processing completed: ${voteData.id}, the cloudinary url is ${cloudinaryUrl}`,
-      );
+      logger.log(`✅ [INDEXER] Vote processing completed: ${voteData.id}`);
     } catch (error) {
       logger.error(`❌ [INDEXER] Error processing vote ${voteData.id}:`, error);
       throw error;

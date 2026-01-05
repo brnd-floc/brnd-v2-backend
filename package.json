@@ -21,7 +21,9 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "restore-brand-names": "ts-node restore-brand-names.ts"
+    "restore-brand-names": "ts-node restore-brand-names.ts",
+    "sync-votes": "ts-node scripts/sync-votes.ts",
+    "sync-votes:bun": "bun run scripts/sync-votes.ts"
   },
   "dependencies": {
     "@farcaster/auth-client": "^0.1.1",

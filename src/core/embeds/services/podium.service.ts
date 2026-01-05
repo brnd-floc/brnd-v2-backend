@@ -173,35 +173,37 @@ export class PodiumService implements OnModuleInit {
     };
   }
 
-  async generatePodiumImageFromTxHash(
-    transactionHash: string,
-  ): Promise<string> {
-    try {
-      const vote = await this.userBrandVotesRepository.findOne({
-        where: { transactionHash },
-        relations: ['user', 'brand1', 'brand2', 'brand3'],
-      });
-      if (!vote) throw new Error(`Vote not found: ${transactionHash}`);
+  // async generatePodiumImageFromTxHash(
+  //   transactionHash: string,
+  // ): Promise<string> {
+  //   try {
+  //     const vote = await this.userBrandVotesRepository.findOne({
+  //       where: { transactionHash },
+  //       relations: ['user', 'brand1', 'brand2', 'brand3'],
+  //     });
+  //     if (!vote) throw new Error(`Vote not found: ${transactionHash}`);
 
-      const podiumData = this.voteToPodiumData(vote);
-      const imageBuffer = await this.generatePodiumImage(podiumData);
+  //     const podiumData = this.voteToPodiumData(vote);
+  //     const imageBuffer = await this.generatePodiumImage(podiumData);
 
-      const cloudinaryUrl = await this.uploadToCloudinary(
-        imageBuffer,
-        transactionHash,
-      );
+  //     const cloudinaryUrl = await this.uploadToCloudinary(
+  //       imageBuffer,
+  //       transactionHash,
+  //     );
 
-      await this.userBrandVotesRepository.update(
-        { transactionHash },
-        { podiumImageUrl: cloudinaryUrl },
-      );
+  //     await this.userBrandVotesRepository.update(
+  //       { transactionHash },
+  //       {
+  //         podiumImageUrl: `https://embeds-sigma.vercel.app/podium/${transactionHash}`,
+  //       },
+  //     );
 
-      return cloudinaryUrl;
-    } catch (error) {
-      this.logger.error('Error generating podium image:', error as any);
-      throw error;
-    }
-  }
+  //     return cloudinaryUrl;
+  //   } catch (error) {
+  //     this.logger.error('Error generating podium image:', error as any);
+  //     throw error;
+  //   }
+  // }
 
   private async uploadToCloudinary(
     buffer: Buffer,
