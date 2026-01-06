@@ -14,6 +14,7 @@ import { base } from 'viem/chains';
 import { User, UserBrandVotes } from '../../../models';
 import { getConfig } from '../../../security/config';
 import { logger } from '../../../main';
+import { PodiumService } from './podium.service';
 
 @Injectable()
 export class SignatureService {
@@ -27,6 +28,7 @@ export class SignatureService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserBrandVotes)
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
+    private readonly podiumService: PodiumService,
   ) {}
 
   async generateAuthorizationSignature(
@@ -498,5 +500,230 @@ export class SignatureService {
       logger.error('Error fetching Neynar user info:', error);
       return null;
     }
+  }
+
+  /**
+   * Generates EIP-712 signature for claiming a podium NFT
+   */
+  async generateClaimPodiumSignature(
+    fid: number,
+    walletAddress: string,
+    brandIds: [number, number, number],
+    deadline: number,
+  ): Promise<string> {
+    logger.log(
+      `🏆 [PODIUM SIGNATURE] Generating claim signature for FID: ${fid}, Brands: [${brandIds.join(', ')}]`,
+    );
+
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY environment variable is not set');
+    }
+
+    // Get nonce from contract
+    const nonce = await this.podiumService.getFidNonce(fid);
+    logger.log(`🏆 [PODIUM SIGNATURE] Current nonce: ${nonce}`);
+
+    const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
+      ? (process.env.PRIVATE_KEY as `0x${string}`)
+      : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
+
+    const account = privateKeyToAccount(privateKey);
+
+    const walletClient = createWalletClient({
+      account,
+      chain: base,
+      transport: http(),
+    });
+
+    const PODIUM_CONTRACT_ADDRESS =
+      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+
+    const domain = {
+      name: 'BRNDPodiumCollectables',
+      version: '1',
+      chainId: 8453,
+      verifyingContract: PODIUM_CONTRACT_ADDRESS,
+    } as const;
+
+    const types = {
+      ClaimPodium: [
+        { name: 'brand1', type: 'uint16' },
+        { name: 'brand2', type: 'uint16' },
+        { name: 'brand3', type: 'uint16' },
+        { name: 'fid', type: 'uint256' },
+        { name: 'price', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    } as const;
+
+    const BASE_PRICE = BigInt('1000000000000000000000000'); // 1,000,000 BRND
+
+    const signature = await walletClient.signTypedData({
+      account,
+      domain,
+      types,
+      primaryType: 'ClaimPodium',
+      message: {
+        brand1: brandIds[0],
+        brand2: brandIds[1],
+        brand3: brandIds[2],
+        fid: BigInt(fid),
+        price: BASE_PRICE,
+        nonce: nonce,
+        deadline: BigInt(deadline),
+      },
+    });
+
+    logger.log(`✅ [PODIUM SIGNATURE] Claim signature generated: ${signature}`);
+    return signature;
+  }
+
+  /**
+   * Generates EIP-712 signature for buying a podium NFT
+   */
+  async generateBuyPodiumSignature(
+    fid: number,
+    walletAddress: string,
+    tokenId: number,
+    deadline: number,
+  ): Promise<string> {
+    logger.log(
+      `💰 [PODIUM SIGNATURE] Generating buy signature for FID: ${fid}, TokenId: ${tokenId}`,
+    );
+
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY environment variable is not set');
+    }
+
+    // Get nonce and podium data
+    const nonce = await this.podiumService.getFidNonce(fid);
+    const podiumData = await this.podiumService.getPodiumData(tokenId);
+    const price = this.podiumService.calculatePrice(podiumData.claimCount);
+
+    logger.log(`💰 [PODIUM SIGNATURE] Current nonce: ${nonce}, Price: ${price}`);
+
+    const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
+      ? (process.env.PRIVATE_KEY as `0x${string}`)
+      : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
+
+    const account = privateKeyToAccount(privateKey);
+
+    const walletClient = createWalletClient({
+      account,
+      chain: base,
+      transport: http(),
+    });
+
+    const PODIUM_CONTRACT_ADDRESS =
+      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+
+    const domain = {
+      name: 'BRNDPodiumCollectables',
+      version: '1',
+      chainId: 8453,
+      verifyingContract: PODIUM_CONTRACT_ADDRESS,
+    } as const;
+
+    const types = {
+      BuyPodium: [
+        { name: 'tokenId', type: 'uint256' },
+        { name: 'buyerFid', type: 'uint256' },
+        { name: 'price', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    } as const;
+
+    const signature = await walletClient.signTypedData({
+      account,
+      domain,
+      types,
+      primaryType: 'BuyPodium',
+      message: {
+        tokenId: BigInt(tokenId),
+        buyerFid: BigInt(fid),
+        price: price,
+        nonce: nonce,
+        deadline: BigInt(deadline),
+      },
+    });
+
+    logger.log(`✅ [PODIUM SIGNATURE] Buy signature generated: ${signature}`);
+    return signature;
+  }
+
+  /**
+   * Generates EIP-712 signature for claiming fees from a podium
+   */
+  async generateClaimFeesSignature(
+    tokenId: number,
+    deadline: number,
+  ): Promise<string> {
+    logger.log(
+      `💵 [PODIUM SIGNATURE] Generating claim fees signature for TokenId: ${tokenId}`,
+    );
+
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY environment variable is not set');
+    }
+
+    // Get fee claim nonce and calculate fees
+    const feeClaimNonce = await this.podiumService.getFeeClaimNonce(tokenId);
+    const feeAmount = await this.podiumService.calculateAccumulatedFees(
+      tokenId,
+      feeClaimNonce,
+    );
+
+    logger.log(
+      `💵 [PODIUM SIGNATURE] Fee claim nonce: ${feeClaimNonce}, Fee amount: ${feeAmount}`,
+    );
+
+    const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
+      ? (process.env.PRIVATE_KEY as `0x${string}`)
+      : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
+
+    const account = privateKeyToAccount(privateKey);
+
+    const walletClient = createWalletClient({
+      account,
+      chain: base,
+      transport: http(),
+    });
+
+    const PODIUM_CONTRACT_ADDRESS =
+      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+
+    const domain = {
+      name: 'BRNDPodiumCollectables',
+      version: '1',
+      chainId: 8453,
+      verifyingContract: PODIUM_CONTRACT_ADDRESS,
+    } as const;
+
+    const types = {
+      ClaimFees: [
+        { name: 'tokenId', type: 'uint256' },
+        { name: 'feeAmount', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    } as const;
+
+    const signature = await walletClient.signTypedData({
+      account,
+      domain,
+      types,
+      primaryType: 'ClaimFees',
+      message: {
+        tokenId: BigInt(tokenId),
+        feeAmount: feeAmount,
+        nonce: feeClaimNonce,
+        deadline: BigInt(deadline),
+      },
+    });
+
+    logger.log(`✅ [PODIUM SIGNATURE] Claim fees signature generated: ${signature}`);
+    return signature;
   }
 }

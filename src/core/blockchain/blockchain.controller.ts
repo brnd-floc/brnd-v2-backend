@@ -15,6 +15,7 @@ import { SignatureService } from './services/signature.service';
 import { RewardService } from './services/reward.service';
 import { CastVerificationService } from './services/cast-verification.service';
 import { IndexerService } from './services/indexer.service';
+import { PodiumService } from './services/podium.service';
 
 import {
   AuthorizationGuard,
@@ -36,6 +37,9 @@ import {
   SubmitBrandDto,
   SubmitRewardClaimDto,
   UpdateUserLevelDto,
+  ClaimPodiumSignatureDto,
+  BuyPodiumSignatureDto,
+  ClaimFeesSignatureDto,
 } from './dto';
 import { BlockchainBrandDto } from '../admin/dto';
 import { AdminService } from '../admin/services/admin.service';
@@ -51,6 +55,7 @@ export class BlockchainController {
     private readonly castVerificationService: CastVerificationService,
     private readonly indexerService: IndexerService,
     private readonly adminService: AdminService,
+    private readonly podiumService: PodiumService,
   ) {}
 
   @Post('/authorize-wallet')
@@ -573,6 +578,227 @@ export class BlockchainController {
       );
       throw new InternalServerErrorException(
         `Failed to create brand from blockchain: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Claim Podium Signature
+   * Generates an EIP-712 signature authorizing a user to claim (mint) a new podium NFT
+   */
+  @Post('/podium/claim-signature')
+  @UseGuards(AuthorizationGuard)
+  async claimPodiumSignature(
+    @Session() session: QuickAuthPayload,
+    @Body() body: ClaimPodiumSignatureDto,
+  ) {
+    try {
+      logger.log(
+        `🏆 [PODIUM] Claim signature request for FID: ${session.sub}, Brands: [${body.brandIds.join(', ')}]`,
+      );
+
+      const { walletAddress, brandIds, deadline } = body;
+
+      // Validate deadline (not more than 24 hours in the future)
+      const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+      if (deadline > maxDeadline) {
+        throw new BadRequestException(
+          'Deadline cannot be more than 24 hours in the future',
+        );
+      }
+
+      // Check eligibility
+      const eligibility = await this.podiumService.checkClaimEligibility(
+        session.sub,
+        brandIds,
+      );
+
+      if (!eligibility.eligible) {
+        throw new ForbiddenException({
+          error: 'NOT_ELIGIBLE',
+          message:
+            eligibility.reason || 'User not eligible to claim this podium',
+        });
+      }
+
+      // Generate signature
+      const signature =
+        await this.signatureService.generateClaimPodiumSignature(
+          session.sub,
+          walletAddress,
+          brandIds,
+          deadline,
+        );
+
+      const BASE_PRICE = '1000000000000000000000000'; // 1,000,000 BRND
+
+      return {
+        signature,
+        price: BASE_PRICE,
+        eligible: true,
+        reason: null,
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      logger.error('Failed to generate claim podium signature:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate claim podium signature',
+      );
+    }
+  }
+
+  /**
+   * Buy Podium Signature
+   * Generates an EIP-712 signature authorizing a user to buy an existing podium NFT
+   */
+  @Post('/podium/buy-signature')
+  @UseGuards(AuthorizationGuard)
+  async buyPodiumSignature(
+    @Session() session: QuickAuthPayload,
+    @Body() body: BuyPodiumSignatureDto,
+  ) {
+    try {
+      logger.log(
+        `💰 [PODIUM] Buy signature request for FID: ${session.sub}, TokenId: ${body.tokenId}`,
+      );
+
+      const { walletAddress, tokenId, deadline } = body;
+
+      // Validate deadline
+      const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+      if (deadline > maxDeadline) {
+        throw new BadRequestException(
+          'Deadline cannot be more than 24 hours in the future',
+        );
+      }
+
+      // Verify token exists and get podium data
+      let podiumData;
+      try {
+        podiumData = await this.podiumService.getPodiumData(tokenId);
+      } catch (error) {
+        throw new BadRequestException({
+          error: 'TOKEN_NOT_FOUND',
+          message: 'Token does not exist',
+        });
+      }
+
+      // Verify buyer is not the current owner
+      if (podiumData.ownerFid === BigInt(session.sub)) {
+        throw new ForbiddenException({
+          error: 'ALREADY_OWNER',
+          message: 'You are already the owner of this podium',
+        });
+      }
+
+      // Calculate current price
+      const price = this.podiumService.calculatePrice(podiumData.claimCount);
+
+      // Generate signature
+      const signature = await this.signatureService.generateBuyPodiumSignature(
+        session.sub,
+        walletAddress,
+        tokenId,
+        deadline,
+      );
+
+      return {
+        signature,
+        price: price.toString(),
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      logger.error('Failed to generate buy podium signature:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate buy podium signature',
+      );
+    }
+  }
+
+  /**
+   * Claim Fees Signature
+   * Generates an EIP-712 signature authorizing a podium owner to claim accumulated fees
+   */
+  @Post('/podium/claim-fees-signature')
+  @UseGuards(AuthorizationGuard)
+  async claimFeesSignature(
+    @Session() session: QuickAuthPayload,
+    @Body() body: ClaimFeesSignatureDto,
+  ) {
+    try {
+      logger.log(
+        `💵 [PODIUM] Claim fees signature request for FID: ${session.sub}, TokenId: ${body.tokenId}`,
+      );
+
+      const { walletAddress, tokenId, deadline } = body;
+
+      // Validate deadline
+      const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+      if (deadline > maxDeadline) {
+        throw new BadRequestException(
+          'Deadline cannot be more than 24 hours in the future',
+        );
+      }
+
+      // Verify token exists and get podium data
+      let podiumData;
+      try {
+        podiumData = await this.podiumService.getPodiumData(tokenId);
+      } catch (error) {
+        throw new BadRequestException({
+          error: 'TOKEN_NOT_FOUND',
+          message: 'Token does not exist',
+        });
+      }
+
+      // Verify caller is the current owner
+      if (podiumData.ownerFid !== BigInt(session.sub)) {
+        throw new ForbiddenException({
+          error: 'NOT_OWNER',
+          message: 'You are not the owner of this podium',
+        });
+      }
+
+      // Get fee claim nonce and calculate fees
+      const feeClaimNonce = await this.podiumService.getFeeClaimNonce(tokenId);
+      const feeAmount = await this.podiumService.calculateAccumulatedFees(
+        tokenId,
+        feeClaimNonce,
+      );
+
+      // Generate signature
+      const signature = await this.signatureService.generateClaimFeesSignature(
+        tokenId,
+        deadline,
+      );
+
+      return {
+        signature,
+        feeAmount: feeAmount.toString(),
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      logger.error('Failed to generate claim fees signature:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate claim fees signature',
       );
     }
   }
