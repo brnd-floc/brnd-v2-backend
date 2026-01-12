@@ -1,7 +1,7 @@
 /**
  * @file This file defines the User entity with its properties and methods.
  */
-import { Entity, Column, PrimaryColumn, ManyToOne } from 'typeorm';
+import { Entity, Column, PrimaryColumn, ManyToOne, JoinColumn } from 'typeorm';
 
 /**
  * @class UserBrandVotes
@@ -69,4 +69,43 @@ export class UserBrandVotes {
 
   @Column({ nullable: true })
   castedFromFid: number;
+
+  @Column({ default: false })
+  isCollectible: boolean;
+
+  @Column({ nullable: true })
+  collectibleTokenId: number;
+
+  @Column({ nullable: true })
+  collectibleOwnerFid: number;
+
+  @Column({ nullable: true, length: 42 })
+  collectibleOwnerWallet: string;
+
+  @Column({ type: 'decimal', precision: 65, scale: 0, nullable: true })
+  collectiblePrice: string; // Store bigint as string
+
+  @Column({ nullable: true, length: 66 })
+  collectibleMintTxHash: string;
+
+  // Genesis creator gets 5% royalties forever - useful for UI
+  @Column({ nullable: true })
+  collectibleGenesisCreatorFid: number;
+
+  @ManyToOne('User', {
+    nullable: true,
+  })
+  @JoinColumn({
+    name: 'collectibleGenesisCreatorFid',
+    referencedColumnName: 'fid',
+  })
+  collectibleGenesisCreator: any;
+
+  // How many times this podium has been traded (affects price)
+  @Column({ nullable: true })
+  collectibleClaimCount: number;
+
+  // Fee generated when voting on someone else's collectible (10% of vote cost)
+  @Column({ type: 'decimal', precision: 64, scale: 18, nullable: true })
+  collectibleFeeGenerated: string;
 }

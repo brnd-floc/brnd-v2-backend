@@ -63,7 +63,7 @@ export class SignatureService {
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const domain = {
@@ -601,18 +601,20 @@ export class SignatureService {
     const podiumData = await this.podiumService.getPodiumData(tokenId);
     const price = this.podiumService.calculatePrice(podiumData.claimCount);
 
-    logger.log(`💰 [PODIUM SIGNATURE] Current nonce: ${nonce}, Price: ${price}`);
+    logger.log(
+      `💰 [PODIUM SIGNATURE] Current nonce: ${nonce}, Price: ${price}`,
+    );
 
     const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
       ? (process.env.PRIVATE_KEY as `0x${string}`)
       : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
 
     const account = privateKeyToAccount(privateKey);
-
+    const config = getConfig();
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const PODIUM_CONTRACT_ADDRESS =
@@ -682,13 +684,13 @@ export class SignatureService {
     const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
       ? (process.env.PRIVATE_KEY as `0x${string}`)
       : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
-
+    const config = getConfig();
     const account = privateKeyToAccount(privateKey);
 
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const PODIUM_CONTRACT_ADDRESS =
@@ -723,7 +725,9 @@ export class SignatureService {
       },
     });
 
-    logger.log(`✅ [PODIUM SIGNATURE] Claim fees signature generated: ${signature}`);
+    logger.log(
+      `✅ [PODIUM SIGNATURE] Claim fees signature generated: ${signature}`,
+    );
     return signature;
   }
 }

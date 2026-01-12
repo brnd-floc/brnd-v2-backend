@@ -36,7 +36,6 @@ const PODIUM_CONTRACT_ABI = [
     name: 'ECDSAInvalidSignatureS',
     type: 'error',
   },
-  { inputs: [], name: 'ERC721EnumerableForbiddenBatchMint', type: 'error' },
   {
     inputs: [
       { internalType: 'address', name: 'sender', type: 'address' },
@@ -84,14 +83,6 @@ const PODIUM_CONTRACT_ABI = [
     name: 'ERC721NonexistentToken',
     type: 'error',
   },
-  {
-    inputs: [
-      { internalType: 'address', name: 'owner', type: 'address' },
-      { internalType: 'uint256', name: 'index', type: 'uint256' },
-    ],
-    name: 'ERC721OutOfBoundsIndex',
-    type: 'error',
-  },
   { inputs: [], name: 'Expired', type: 'error' },
   { inputs: [], name: 'InsufficientBalance', type: 'error' },
   { inputs: [], name: 'InvalidInput', type: 'error' },
@@ -107,7 +98,7 @@ const PODIUM_CONTRACT_ABI = [
     name: 'OwnableUnauthorizedAccount',
     type: 'error',
   },
-  { inputs: [], name: 'ReentrancyGuard', type: 'error' },
+  { inputs: [], name: 'ReentrancyGuardReentrantCall', type: 'error' },
   { inputs: [], name: 'TransferBlocked', type: 'error' },
   { inputs: [], name: 'Unauthorized', type: 'error' },
   {
@@ -175,12 +166,6 @@ const PODIUM_CONTRACT_ABI = [
         internalType: 'uint256',
         name: 'amount',
         type: 'uint256',
-      },
-      {
-        indexed: false,
-        internalType: 'address',
-        name: 'wallet',
-        type: 'address',
       },
     ],
     name: 'FeesClaimed',
@@ -307,12 +292,6 @@ const PODIUM_CONTRACT_ABI = [
         name: 'amount',
         type: 'uint256',
       },
-      {
-        indexed: false,
-        internalType: 'address',
-        name: 'wallet',
-        type: 'address',
-      },
     ],
     name: 'ProceedsClaimed',
     type: 'event',
@@ -326,12 +305,6 @@ const PODIUM_CONTRACT_ABI = [
         internalType: 'uint256',
         name: 'amount',
         type: 'uint256',
-      },
-      {
-        indexed: false,
-        internalType: 'address',
-        name: 'wallet',
-        type: 'address',
       },
     ],
     name: 'RoyaltiesClaimed',
@@ -382,7 +355,14 @@ const PODIUM_CONTRACT_ABI = [
   },
   {
     inputs: [],
-    name: 'PRICE_INCREMENT',
+    name: 'MULTIPLIER_DENOMINATOR',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'PRICE_MULTIPLIER',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -390,13 +370,6 @@ const PODIUM_CONTRACT_ABI = [
   {
     inputs: [],
     name: 'PROTOCOL_FEE_BPS',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'REPEAT_FEE_BPS',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -445,8 +418,6 @@ const PODIUM_CONTRACT_ABI = [
     inputs: [
       { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
       { internalType: 'uint256', name: 'buyerFid', type: 'uint256' },
-      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
-      { internalType: 'bytes', name: 'signature', type: 'bytes' },
     ],
     name: 'buyPodium',
     outputs: [],
@@ -455,7 +426,7 @@ const PODIUM_CONTRACT_ABI = [
   },
   {
     inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'claimAll',
+    name: 'claimBalance',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -473,13 +444,6 @@ const PODIUM_CONTRACT_ABI = [
     type: 'function',
   },
   {
-    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'claimProceeds',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
     inputs: [
       { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
       { internalType: 'uint256', name: 'feeAmount', type: 'uint256' },
@@ -487,13 +451,6 @@ const PODIUM_CONTRACT_ABI = [
       { internalType: 'bytes', name: 'signature', type: 'bytes' },
     ],
     name: 'claimRepeatFees',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'claimRoyalties',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -510,16 +467,6 @@ const PODIUM_CONTRACT_ABI = [
     name: 'claimableRoyalties',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'uint256', name: 'amount', type: 'uint256' },
-    ],
-    name: 'emergencyWithdraw',
-    outputs: [],
-    stateMutability: 'nonpayable',
     type: 'function',
   },
   {
@@ -560,44 +507,34 @@ const PODIUM_CONTRACT_ABI = [
     type: 'function',
   },
   {
-    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
-    name: 'getClaimableBalances',
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'getPodium',
     outputs: [
-      { internalType: 'uint256', name: 'proceeds', type: 'uint256' },
-      { internalType: 'uint256', name: 'royalties', type: 'uint256' },
+      {
+        components: [
+          { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
+          {
+            internalType: 'uint256',
+            name: 'genesisCreatorFid',
+            type: 'uint256',
+          },
+          { internalType: 'uint256', name: 'ownerFid', type: 'uint256' },
+          { internalType: 'uint256', name: 'claimCount', type: 'uint256' },
+          { internalType: 'uint256', name: 'lastSalePrice', type: 'uint256' },
+          { internalType: 'uint256', name: 'totalFeesEarned', type: 'uint256' },
+          { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
+        ],
+        internalType: 'struct BRNDPodiumCollectables.PodiumData',
+        name: '',
+        type: 'tuple',
+      },
     ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'bytes32', name: 'arrangementHash', type: 'bytes32' },
-    ],
-    name: 'getCurrentPrice',
-    outputs: [{ internalType: 'uint256', name: 'price', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
   },
   {
     inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
-    name: 'getPodium',
-    outputs: [
-      { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
-      { internalType: 'uint256', name: 'genesisCreatorFid', type: 'uint256' },
-      { internalType: 'uint256', name: 'ownerFid', type: 'uint256' },
-      { internalType: 'uint256', name: 'claimCount', type: 'uint256' },
-      { internalType: 'uint256', name: 'currentPrice', type: 'uint256' },
-      { internalType: 'uint256', name: 'totalFeesEarned', type: 'uint256' },
-      { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
-    ],
-    name: 'getTokenIdForArrangement',
+    name: 'getPriceByTokenId',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -608,15 +545,6 @@ const PODIUM_CONTRACT_ABI = [
       { internalType: 'address', name: 'operator', type: 'address' },
     ],
     name: 'isApprovedForAll',
-    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
-    ],
-    name: 'isArrangementMinted',
     outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function',
@@ -741,30 +669,6 @@ const PODIUM_CONTRACT_ABI = [
     type: 'function',
   },
   {
-    inputs: [{ internalType: 'uint256', name: 'index', type: 'uint256' }],
-    name: 'tokenByIndex',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'owner', type: 'address' },
-      { internalType: 'uint256', name: 'index', type: 'uint256' },
-    ],
-    name: 'tokenOfOwnerByIndex',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    name: 'tokenToArrangement',
-    outputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
     inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
     name: 'tokenURI',
     outputs: [{ internalType: 'string', name: '', type: 'string' }],
@@ -773,14 +677,7 @@ const PODIUM_CONTRACT_ABI = [
   },
   {
     inputs: [],
-    name: 'totalPodiums',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'totalSupply',
+    name: 'totalMinted',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -808,7 +705,7 @@ const PODIUM_CONTRACT_ABI = [
 @Injectable()
 export class PodiumService {
   private readonly PODIUM_CONTRACT_ADDRESS =
-    '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+    '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
   private readonly BASE_PRICE = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly PRICE_INCREMENT = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly REPEAT_FEE_BPS = 1000; // 10%
@@ -824,6 +721,164 @@ export class PodiumService {
       transport: http(),
     });
   }
+
+  // ============================================================================
+  //                    COLLECTIBLE EVENT HANDLERS (NEW)
+  // ============================================================================
+
+  /**
+   * Handle PodiumMinted event from indexer
+   * Updates all votes with matching brand combination to mark them as collectibles
+   */
+  async handleCollectibleMinted(data: {
+    tokenId: number;
+    brandIds: [number, number, number];
+    ownerFid: number;
+    ownerWallet: string;
+    price: string;
+    txHash: string;
+  }): Promise<{ affected: number }> {
+    try {
+      logger.log(
+        `🏆 [COLLECTIBLE] Processing mint for Token #${data.tokenId}, Brands: [${data.brandIds.join(', ')}]`,
+      );
+
+      const result = await this.userBrandVotesRepository
+        .createQueryBuilder()
+        .update(UserBrandVotes)
+        .set({
+          isCollectible: true,
+          collectibleTokenId: data.tokenId,
+          collectibleOwnerFid: data.ownerFid,
+          collectibleOwnerWallet: data.ownerWallet,
+          collectiblePrice: data.price,
+          collectibleMintTxHash: data.txHash,
+          collectibleGenesisCreatorFid: data.ownerFid,
+          collectibleClaimCount: 1,
+        })
+        .where('brand1Id = :b1 AND brand2Id = :b2 AND brand3Id = :b3', {
+          b1: data.brandIds[0],
+          b2: data.brandIds[1],
+          b3: data.brandIds[2],
+        })
+        .execute();
+
+      logger.log(
+        `✅ [COLLECTIBLE] Mint processed - Token #${data.tokenId} - Updated ${result.affected} votes`,
+      );
+
+      return { affected: result.affected || 0 };
+    } catch (error) {
+      logger.error(
+        `❌ [COLLECTIBLE] Failed to process mint for Token #${data.tokenId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Handle PodiumBought event from indexer
+   * Updates all votes with matching tokenId to reflect new ownership
+   */
+  async handleCollectibleBought(data: {
+    tokenId: number;
+    newOwnerFid: number;
+    newOwnerWallet: string;
+    price: string;
+    claimCount: number;
+  }): Promise<{ affected: number }> {
+    try {
+      logger.log(
+        `💰 [COLLECTIBLE] Processing buy for Token #${data.tokenId}, New Owner FID: ${data.newOwnerFid}`,
+      );
+
+      const result = await this.userBrandVotesRepository
+        .createQueryBuilder()
+        .update(UserBrandVotes)
+        .set({
+          collectibleOwnerFid: data.newOwnerFid,
+          collectibleOwnerWallet: data.newOwnerWallet,
+          collectiblePrice: data.price,
+          collectibleClaimCount: data.claimCount,
+        })
+        .where('collectibleTokenId = :tokenId', {
+          tokenId: data.tokenId,
+        })
+        .execute();
+
+      logger.log(
+        `✅ [COLLECTIBLE] Buy processed - Token #${data.tokenId} - Updated ${result.affected} votes`,
+      );
+
+      return { affected: result.affected || 0 };
+    } catch (error) {
+      logger.error(
+        `❌ [COLLECTIBLE] Failed to process buy for Token #${data.tokenId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get collectible info for a specific vote/podium arrangement
+   */
+  async getCollectibleInfo(brandIds: [number, number, number]): Promise<{
+    isCollectible: boolean;
+    tokenId: number | null;
+    ownerFid: number | null;
+    ownerWallet: string | null;
+    price: string | null;
+    genesisCreatorFid: number | null;
+    claimCount: number | null;
+  }> {
+    try {
+      const vote = await this.userBrandVotesRepository
+        .createQueryBuilder('vote')
+        .where(
+          'vote.brand1Id = :b1 AND vote.brand2Id = :b2 AND vote.brand3Id = :b3',
+          {
+            b1: brandIds[0],
+            b2: brandIds[1],
+            b3: brandIds[2],
+          },
+        )
+        .andWhere('vote.isCollectible = :isCollectible', {
+          isCollectible: true,
+        })
+        .getOne();
+
+      if (!vote) {
+        return {
+          isCollectible: false,
+          tokenId: null,
+          ownerFid: null,
+          ownerWallet: null,
+          price: null,
+          genesisCreatorFid: null,
+          claimCount: null,
+        };
+      }
+
+      return {
+        isCollectible: true,
+        tokenId: vote.collectibleTokenId,
+        ownerFid: vote.collectibleOwnerFid,
+        ownerWallet: vote.collectibleOwnerWallet,
+        price: vote.collectiblePrice,
+        genesisCreatorFid: vote.collectibleGenesisCreatorFid,
+        claimCount: vote.collectibleClaimCount,
+      };
+    } catch (error) {
+      logger.error('Error getting collectible info:', error);
+      throw error;
+    }
+  }
+
+  // ============================================================================
+  //                    EXISTING METHODS (UNCHANGED)
+  // ============================================================================
 
   /**
    * Calculate arrangement hash from brand IDs
@@ -857,7 +912,6 @@ export class PodiumService {
         args: [arrangementHash],
       });
 
-      // If tokenId is 0, the arrangement is not minted
       return (tokenId as bigint) !== BigInt(0);
     } catch (error) {
       logger.error('Error checking if arrangement is minted:', error);
@@ -887,13 +941,15 @@ export class PodiumService {
   /**
    * Get fee claim nonce for a token
    */
-  async getFeeClaimNonce(tokenId: number): Promise<bigint> {
+  async getFeeClaimNonce(tokenId: string | number): Promise<bigint> {
     try {
+      const tokenIdBigInt =
+        typeof tokenId === 'string' ? BigInt(tokenId) : BigInt(tokenId);
       const nonce = await this.publicClient.readContract({
         address: this.PODIUM_CONTRACT_ADDRESS,
         abi: PODIUM_CONTRACT_ABI,
         functionName: 'feeClaimNonces',
-        args: [BigInt(tokenId)],
+        args: [tokenIdBigInt],
       });
 
       return nonce as bigint;
@@ -909,27 +965,31 @@ export class PodiumService {
   /**
    * Get podium data from contract
    */
-  async getPodiumData(tokenId: number): Promise<{
-    brand1: number;
-    brand2: number;
-    brand3: number;
+  async getPodiumData(tokenId: string | number): Promise<{
     ownerFid: bigint;
     claimCount: bigint;
   }> {
     try {
+      const tokenIdBigInt =
+        typeof tokenId === 'string' ? BigInt(tokenId) : BigInt(tokenId);
       const data = await this.publicClient.readContract({
         address: this.PODIUM_CONTRACT_ADDRESS,
         abi: PODIUM_CONTRACT_ABI,
         functionName: 'podiumData',
-        args: [BigInt(tokenId)],
+        args: [tokenIdBigInt],
       });
 
+      const result = data as readonly [
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+      ];
       return {
-        brand1: Number((data as any).brand1),
-        brand2: Number((data as any).brand2),
-        brand3: Number((data as any).brand3),
-        ownerFid: (data as any).ownerFid as bigint,
-        claimCount: (data as any).claimCount as bigint,
+        ownerFid: result[1],
+        claimCount: result[2],
       };
     } catch (error) {
       logger.error(`Error getting podium data for token ${tokenId}:`, error);
@@ -953,12 +1013,10 @@ export class PodiumService {
       return price as bigint;
     } catch (error) {
       logger.error('Error getting current price:', error);
-      // Fallback to calculating price from claimCount
       const isMinted = await this.isArrangementMinted(brandIds);
       if (!isMinted) {
         return this.BASE_PRICE;
       }
-      // If minted, we need to get the tokenId and then podiumData
       const arrangementHash = this.calculateArrangementHash(brandIds);
       const tokenId = await this.publicClient.readContract({
         address: this.PODIUM_CONTRACT_ADDRESS,
@@ -980,18 +1038,12 @@ export class PodiumService {
 
   /**
    * Check if user is eligible to claim a podium
-   * Eligibility rules:
-   * 1. Arrangement must not be minted
-   * 2. User created this podium arrangement in Season2, OR
-   * 3. User was the last person to vote this exact arrangement in Season2
-   * 4. No one else has voted this arrangement since the user created/voted it
    */
   async checkClaimEligibility(
     fid: number,
     brandIds: [number, number, number],
   ): Promise<{ eligible: boolean; reason: string | null }> {
     try {
-      // Check if arrangement is already minted
       const isMinted = await this.isArrangementMinted(brandIds);
       if (isMinted) {
         return {
@@ -1000,7 +1052,6 @@ export class PodiumService {
         };
       }
 
-      // Find all votes for this exact arrangement using QueryBuilder
       const votes = await this.userBrandVotesRepository
         .createQueryBuilder('vote')
         .leftJoinAndSelect('vote.user', 'user')
@@ -1020,7 +1071,6 @@ export class PodiumService {
         };
       }
 
-      // Check if the user created or was the last to vote this arrangement
       const lastVote = votes[0];
       const userVote = votes.find((vote) => vote.user.fid === fid);
 
@@ -1031,7 +1081,6 @@ export class PodiumService {
         };
       }
 
-      // Check if user was the last to vote (or created it)
       if (lastVote.user.fid !== fid) {
         return {
           eligible: false,
@@ -1050,23 +1099,66 @@ export class PodiumService {
   }
 
   /**
+   * Get full podium data including brandIds
+   */
+  async getPodium(tokenId: string | number): Promise<{
+    brandIds: [number, number, number];
+    genesisCreatorFid: bigint;
+    ownerFid: bigint;
+    claimCount: bigint;
+    currentPrice: bigint;
+    totalFeesEarned: bigint;
+    createdAt: bigint;
+  }> {
+    try {
+      const tokenIdBigInt =
+        typeof tokenId === 'string' ? BigInt(tokenId) : BigInt(tokenId);
+      const data = await this.publicClient.readContract({
+        address: this.PODIUM_CONTRACT_ADDRESS,
+        abi: PODIUM_CONTRACT_ABI,
+        functionName: 'getPodium',
+        args: [tokenIdBigInt],
+      });
+
+      const result = data as readonly [
+        readonly [bigint, bigint, bigint],
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+      ];
+      return {
+        brandIds: [
+          Number(result[0][0]),
+          Number(result[0][1]),
+          Number(result[0][2]),
+        ] as [number, number, number],
+        genesisCreatorFid: result[1],
+        ownerFid: result[2],
+        claimCount: result[3],
+        currentPrice: result[4],
+        totalFeesEarned: result[5],
+        createdAt: result[6],
+      };
+    } catch (error) {
+      logger.error(`Error getting podium for token ${tokenId}:`, error);
+      throw new Error('Failed to get podium data from contract');
+    }
+  }
+
+  /**
    * Calculate accumulated fees for a podium
-   * Fees are 10% of all vote costs for votes on this podium arrangement
-   * since the last fee claim
    */
   async calculateAccumulatedFees(
-    tokenId: number,
+    tokenId: string | number,
     feeClaimNonce: bigint,
   ): Promise<bigint> {
     try {
-      const podiumData = await this.getPodiumData(tokenId);
-      const brandIds: [number, number, number] = [
-        podiumData.brand1,
-        podiumData.brand2,
-        podiumData.brand3,
-      ];
+      const podium = await this.getPodium(tokenId);
+      const brandIds = podium.brandIds;
 
-      // Find all votes for this arrangement using QueryBuilder
       const votes = await this.userBrandVotesRepository
         .createQueryBuilder('vote')
         .leftJoinAndSelect('vote.brand1', 'brand1')
@@ -1078,22 +1170,14 @@ export class PodiumService {
         .orderBy('vote.date', 'ASC')
         .getMany();
 
-      // Calculate fees: 10% of each vote cost
-      // Note: voteCost is stored as brndPaidWhenCreatingPodium
       let totalFees = BigInt(0);
       for (const vote of votes) {
         if (vote.brndPaidWhenCreatingPodium) {
-          // Convert to BigInt and calculate 10%
           const voteCost = BigInt(vote.brndPaidWhenCreatingPodium);
           const fee = (voteCost * BigInt(this.REPEAT_FEE_BPS)) / BigInt(10000);
           totalFees += fee;
         }
       }
-
-      // TODO: Subtract fees already claimed
-      // This would require tracking FeesClaimed events or using feeClaimNonce
-      // For now, we return the total accumulated fees
-      // The contract will handle preventing double claims via nonce
 
       return totalFees;
     } catch (error) {

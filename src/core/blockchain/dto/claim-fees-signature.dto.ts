@@ -5,9 +5,9 @@ export class ClaimFeesSignatureDto {
   @IsNotEmpty()
   walletAddress: string;
 
-  @IsNumber()
+  @IsString()
   @IsNotEmpty()
-  tokenId: number;
+  tokenId: string; // Accept as string to handle large uint256 values
 
   @IsNumber()
   @IsNotEmpty()

@@ -40,6 +40,8 @@ import {
   ClaimPodiumSignatureDto,
   BuyPodiumSignatureDto,
   ClaimFeesSignatureDto,
+  CollectibleMintedDto,
+  CollectibleBoughtDto,
 } from './dto';
 import { BlockchainBrandDto } from '../admin/dto';
 import { AdminService } from '../admin/services/admin.service';
@@ -456,6 +458,70 @@ export class BlockchainController {
   }
 
   /**
+   * Handles collectible mint events from Ponder indexer
+   * Updates all votes with matching brand combination to mark them as collectibles
+   */
+  @Post('/collectible-minted')
+  @UseGuards(IndexerGuard)
+  async collectibleMinted(@Body() data: CollectibleMintedDto) {
+    try {
+      logger.log(
+        `🏆 [INDEXER] Received collectible mint: Token #${data.tokenId}, Brands: [${data.brandIds.join(', ')}]`,
+      );
+
+      const result = await this.podiumService.handleCollectibleMinted(data);
+
+      return {
+        success: true,
+        message: 'Collectible mint processed successfully',
+        tokenId: data.tokenId,
+        affected: result.affected,
+      };
+    } catch (error) {
+      logger.error(
+        `❌ [INDEXER] Failed to process collectible mint for Token #${data.tokenId}:`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to process collectible mint: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Handles collectible buy events from Ponder indexer
+   * Updates all votes with matching tokenId to reflect new ownership
+   */
+  @Post('/collectible-bought')
+  @UseGuards(IndexerGuard)
+  async collectibleBought(@Body() data: CollectibleBoughtDto) {
+    try {
+      logger.log(
+        `💰 [INDEXER] Received collectible buy: Token #${data.tokenId}, New Owner: ${data.newOwnerFid}`,
+      );
+
+      const result = await this.podiumService.handleCollectibleBought(data);
+
+      return {
+        success: true,
+        message: 'Collectible buy processed successfully',
+        tokenId: data.tokenId,
+        newOwnerFid: data.newOwnerFid,
+        affected: result.affected,
+      };
+    } catch (error) {
+      logger.error(
+        `❌ [INDEXER] Failed to process collectible buy for Token #${data.tokenId}:`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        `Failed to process collectible buy: ${error.message}`,
+      );
+    }
+  }
+
+  @Post('/webhooks/farcaster/collectible-minted')
+  /**
    * Handles vote submissions from Ponder indexer
    */
   @Post('/submit-vote')
@@ -678,6 +744,15 @@ export class BlockchainController {
         );
       }
 
+      // Convert tokenId string to number for signature generation
+      const tokenIdNumber = parseInt(tokenId, 10);
+      if (isNaN(tokenIdNumber)) {
+        throw new BadRequestException({
+          error: 'INVALID_TOKEN_ID',
+          message: 'Token ID must be a valid number',
+        });
+      }
+
       // Verify token exists and get podium data
       let podiumData;
       try {
@@ -704,7 +779,7 @@ export class BlockchainController {
       const signature = await this.signatureService.generateBuyPodiumSignature(
         session.sub,
         walletAddress,
-        tokenId,
+        tokenIdNumber,
         deadline,
       );
 
@@ -752,6 +827,15 @@ export class BlockchainController {
         );
       }
 
+      // Convert tokenId string to number for signature generation
+      const tokenIdNumber = parseInt(tokenId, 10);
+      if (isNaN(tokenIdNumber)) {
+        throw new BadRequestException({
+          error: 'INVALID_TOKEN_ID',
+          message: 'Token ID must be a valid number',
+        });
+      }
+
       // Verify token exists and get podium data
       let podiumData;
       try {
@@ -780,7 +864,7 @@ export class BlockchainController {
 
       // Generate signature
       const signature = await this.signatureService.generateClaimFeesSignature(
-        tokenId,
+        tokenIdNumber,
         deadline,
       );
 
