@@ -20,6 +20,7 @@ import {
   AirdropSnapshot,
   AirdropLeaf,
   RewardClaim,
+  CollectibleActivity,
 } from './models';
 
 @Module({
@@ -45,6 +46,7 @@ import {
         AirdropSnapshot,
         AirdropLeaf,
         RewardClaim,
+        CollectibleActivity,
       ],
       // Important: Set synchronize to false in production for safety
       synchronize: false, // Enabled to automatically sync schema changes

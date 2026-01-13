@@ -520,7 +520,6 @@ export class BlockchainController {
     }
   }
 
-  @Post('/webhooks/farcaster/collectible-minted')
   /**
    * Handles vote submissions from Ponder indexer
    */
