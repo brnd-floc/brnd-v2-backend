@@ -43,7 +43,7 @@ import {
   CollectibleMintedDto,
   CollectibleBoughtDto,
 } from './dto';
-import { BlockchainBrandDto } from '../admin/dto';
+import { BlockchainBrandDto, PrepareMetadataDto } from '../admin/dto';
 import { AdminService } from '../admin/services/admin.service';
 
 @ApiTags('blockchain-service')
@@ -643,6 +643,61 @@ export class BlockchainController {
       );
       throw new InternalServerErrorException(
         `Failed to create brand from blockchain: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Prepares brand metadata for on-chain creation
+   * Validates data first, then uploads metadata to IPFS and returns hash for smart contract
+   * Protected by IndexerGuard (API key authentication)
+   */
+  @Post('brands/prepare-metadata')
+  @UseGuards(IndexerGuard)
+  async prepareBrandMetadata(@Body() prepareMetadataDto: PrepareMetadataDto) {
+    try {
+      logger.log(
+        `📋 [INDEXER] Received brand metadata preparation request for: ${prepareMetadataDto.handle}`,
+      );
+
+      // Step 1: Validate brand data first
+      logger.log('Validating brand data...');
+      const validation =
+        await this.adminService.validateBrandForCreation(prepareMetadataDto);
+
+      if (!validation.valid) {
+        logger.log('Brand validation failed:', validation);
+        return {
+          success: false,
+          valid: false,
+          message: validation.message,
+          conflicts: validation.conflicts || [],
+        };
+      }
+
+      logger.log(
+        'Brand validation passed, proceeding to metadata preparation...',
+      );
+
+      // Step 2: Prepare metadata and upload to IPFS
+      const result =
+        await this.adminService.prepareBrandMetadata(prepareMetadataDto);
+      logger.log('Brand metadata prepared successfully:', result);
+
+      return {
+        success: true,
+        valid: true,
+        metadataHash: result.metadataHash,
+        handle: result.handle,
+        fid: result.fid,
+        walletAddress: result.walletAddress,
+        message:
+          'Brand validation passed and metadata uploaded to IPFS. Use the metadataHash to create the brand on-chain.',
+      };
+    } catch (error) {
+      logger.error('Error in prepareBrandMetadata:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to prepare brand metadata',
       );
     }
   }
