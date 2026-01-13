@@ -2,6 +2,7 @@
  * @file This file defines the User entity with its properties and methods.
  */
 import { Entity, Column, PrimaryColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../User/User.model';
 
 /**
  * @class UserBrandVotes
@@ -82,6 +83,10 @@ export class UserBrandVotes {
   @Column({ nullable: true, length: 42 })
   collectibleOwnerWallet: string;
 
+  @ManyToOne('User', { nullable: true })
+  @JoinColumn({ name: 'collectibleOwnerFid', referencedColumnName: 'fid' })
+  collectibleOwner: User | null;
+
   @Column({ type: 'decimal', precision: 65, scale: 0, nullable: true })
   collectiblePrice: string; // Store bigint as string
 
@@ -108,4 +113,7 @@ export class UserBrandVotes {
   // Fee generated when voting on someone else's collectible (10% of vote cost)
   @Column({ type: 'decimal', precision: 64, scale: 18, nullable: true })
   collectibleFeeGenerated: string;
+
+  @Column({ type: 'decimal', precision: 65, scale: 0, nullable: true })
+  collectibleTotalFeesEarned: string;
 }

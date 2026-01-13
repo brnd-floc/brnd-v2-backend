@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { createPublicClient, http, keccak256, encodeAbiParameters } from 'viem';
 import { base } from 'viem/chains';
 
-import { UserBrandVotes } from '../../../models';
+import { CollectibleActivity, UserBrandVotes } from '../../../models';
 import { logger } from '../../../main';
 
 // Podium Contract ABI
@@ -715,6 +715,8 @@ export class PodiumService {
   constructor(
     @InjectRepository(UserBrandVotes)
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
+    @InjectRepository(CollectibleActivity)
+    private readonly collectibleActivityRepository: Repository<CollectibleActivity>,
   ) {
     this.publicClient = createPublicClient({
       chain: base,
@@ -787,38 +789,22 @@ export class PodiumService {
     newOwnerWallet: string;
     price: string;
     claimCount: number;
+    totalFeesEarned?: string; // Add this
   }): Promise<{ affected: number }> {
-    try {
-      logger.log(
-        `💰 [COLLECTIBLE] Processing buy for Token #${data.tokenId}, New Owner FID: ${data.newOwnerFid}`,
-      );
+    const result = await this.userBrandVotesRepository
+      .createQueryBuilder()
+      .update(UserBrandVotes)
+      .set({
+        collectibleOwnerFid: data.newOwnerFid,
+        collectibleOwnerWallet: data.newOwnerWallet,
+        collectiblePrice: data.price,
+        collectibleClaimCount: data.claimCount,
+        collectibleTotalFeesEarned: data.totalFeesEarned || '0', // Add this
+      })
+      .where('collectibleTokenId = :tokenId', { tokenId: data.tokenId })
+      .execute();
 
-      const result = await this.userBrandVotesRepository
-        .createQueryBuilder()
-        .update(UserBrandVotes)
-        .set({
-          collectibleOwnerFid: data.newOwnerFid,
-          collectibleOwnerWallet: data.newOwnerWallet,
-          collectiblePrice: data.price,
-          collectibleClaimCount: data.claimCount,
-        })
-        .where('collectibleTokenId = :tokenId', {
-          tokenId: data.tokenId,
-        })
-        .execute();
-
-      logger.log(
-        `✅ [COLLECTIBLE] Buy processed - Token #${data.tokenId} - Updated ${result.affected} votes`,
-      );
-
-      return { affected: result.affected || 0 };
-    } catch (error) {
-      logger.error(
-        `❌ [COLLECTIBLE] Failed to process buy for Token #${data.tokenId}:`,
-        error,
-      );
-      throw error;
-    }
+    return { affected: result.affected || 0 };
   }
 
   /**
@@ -1148,6 +1134,29 @@ export class PodiumService {
     }
   }
 
+  async recordActivity(data: {
+    tokenId: number;
+    eventType: string;
+    price?: string;
+    fromFid: number;
+    toFid?: number;
+    fromWallet: string;
+    toWallet?: string;
+    txHash: string;
+    timestamp: number;
+  }) {
+    const activity = this.collectibleActivityRepository.create(data);
+    return this.collectibleActivityRepository.save(activity);
+  }
+
+  async getActivity(tokenId: number) {
+    return this.collectibleActivityRepository.find({
+      where: { tokenId },
+      relations: ['fromUser', 'toUser'],
+      order: { timestamp: 'DESC' },
+      take: 20,
+    });
+  }
   /**
    * Calculate accumulated fees for a podium
    */

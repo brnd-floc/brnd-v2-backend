@@ -687,6 +687,10 @@ export class BlockchainController {
         });
       }
 
+      console.log('🔑 [PODIUM SIGNATURE] Signer address:', walletAddress);
+      console.log('🔑 [PODIUM SIGNATURE] FID:', session.sub);
+      console.log('🔑 [PODIUM SIGNATURE] Brands:', brandIds);
+      console.log('🔑 [PODIUM SIGNATURE] Deadline:', deadline);
       // Generate signature
       const signature =
         await this.signatureService.generateClaimPodiumSignature(
@@ -885,5 +889,30 @@ export class BlockchainController {
         error.message || 'Failed to generate claim fees signature',
       );
     }
+  }
+
+  @Post('/collectible-activity')
+  @UseGuards(IndexerGuard)
+  async collectibleActivity(
+    @Body()
+    data: {
+      tokenId: number;
+      eventType: string;
+      price?: string;
+      fromFid: number;
+      toFid?: number;
+      fromWallet: string;
+      toWallet?: string;
+      txHash: string;
+      timestamp: number;
+    },
+  ) {
+    return this.podiumService.recordActivity(data);
+  }
+
+  @Get('/collectible-activity/:tokenId')
+  @UseGuards(AuthorizationGuard)
+  async getCollectibleActivity(@Param('tokenId') tokenId: number) {
+    return this.podiumService.getActivity(tokenId);
   }
 }

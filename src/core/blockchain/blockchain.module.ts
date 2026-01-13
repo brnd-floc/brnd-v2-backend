@@ -27,6 +27,7 @@ import {
   Category,
   AirdropSnapshot,
   AirdropScore,
+  CollectibleActivity,
 } from '../../models';
 
 @Module({
@@ -39,6 +40,7 @@ import {
       Category,
       AirdropSnapshot,
       AirdropScore,
+      CollectibleActivity,
     ]),
     forwardRef(() => AuthModule),
     forwardRef(() => BrandModule),

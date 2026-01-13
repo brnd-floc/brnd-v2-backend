@@ -9,3 +9,4 @@ export * from './AirdropScore';
 export * from './AirdropSnapshot';
 export * from './AirdropLeaf';
 export * from './RewardClaim';
+export * from './CollectibleActivity';

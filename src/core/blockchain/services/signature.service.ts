@@ -528,6 +528,7 @@ export class SignatureService {
       : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
 
     const account = privateKeyToAccount(privateKey);
+    console.log('🔑 [PODIUM SIGNATURE] Signer address:', account.address);
 
     const walletClient = createWalletClient({
       account,
@@ -536,7 +537,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+      '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',
@@ -618,7 +619,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+      '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',
@@ -636,6 +637,8 @@ export class SignatureService {
         { name: 'deadline', type: 'uint256' },
       ],
     } as const;
+
+    console.log('🔑 [PODIUM SIGNATURE] Signer address:', account.address);
 
     const signature = await walletClient.signTypedData({
       account,

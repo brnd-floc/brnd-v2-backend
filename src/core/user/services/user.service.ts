@@ -398,48 +398,45 @@ export class UserService {
     userId: User['id'],
     pageId: number = 1,
     limit: number = 15,
-  ): Promise<{ count: number; data: Record<string, any> }> {
+  ): Promise<{ count: number; data: any[] }> {
     const [votes, count] = await this.userBrandVotesRepository.findAndCount({
       where: { user: { id: userId } },
-      relations: ['brand1', 'brand2', 'brand3'],
+      relations: [
+        'brand1',
+        'brand2',
+        'brand3',
+        'collectibleGenesisCreator',
+        'collectibleOwner',
+      ],
       order: { date: 'DESC' },
       skip: (pageId - 1) * limit,
       take: limit,
     });
 
     if (count === 0) {
-      return { count: 0, data: {} };
+      return { count: 0, data: [] };
     }
 
-    const getBrandData = (brand: any) => {
-      if (!brand) return null;
-      return {
-        id: brand.id,
-        name: brand.name,
-        imageUrl: brand.imageUrl,
-        score: brand.score,
-        stateScore: brand.stateScore,
-      };
-    };
-
-    const data: Record<string, any> = {};
-    for (const vote of votes) {
-      // Skip votes where all brands are null
-      if (!vote.brand1 || !vote.brand2 || !vote.brand3) {
-        continue;
-      }
-
-      const dateKey = vote.date.toISOString().split('T')[0];
-      const brand1 = getBrandData(vote.brand1);
-      const brand2 = getBrandData(vote.brand2);
-      const brand3 = getBrandData(vote.brand3);
-
-      data[dateKey] = {
-        brand1,
-        brand2,
-        brand3,
-      };
-    }
+    const data = votes
+      .filter((vote) => vote.brand1 && vote.brand2 && vote.brand3)
+      .map((vote) => ({
+        id: vote.transactionHash,
+        date: vote.date.toISOString(),
+        brand1: vote.brand1,
+        brand2: vote.brand2,
+        brand3: vote.brand3,
+        // Collectible data
+        isCollectible: vote.isCollectible || false,
+        collectibleTokenId: vote.collectibleTokenId || null,
+        collectiblePrice: vote.collectiblePrice || null,
+        collectibleClaimCount: vote.collectibleClaimCount || 0,
+        collectibleGenesisCreatorFid: vote.collectibleGenesisCreatorFid || null,
+        collectibleGenesisCreatorUsername:
+          vote.collectibleGenesisCreator?.username || null,
+        collectibleOwnerFid: vote.collectibleOwnerFid || null,
+        collectibleOwnerUsername: vote.collectibleOwner?.username || null,
+        collectibleTotalFeesEarned: vote.collectibleTotalFeesEarned || '0',
+      }));
 
     return { count, data };
   }
