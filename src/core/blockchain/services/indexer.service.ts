@@ -347,9 +347,30 @@ export class IndexerService {
         shareVerifiedAt: placeholderClaimData?.shareVerifiedAt || null, // Use placeholder data if available
         claimedAt: placeholderClaimData?.claimedAt || null, // Use placeholder data if available
         claimTxHash: placeholderClaimData?.claimTxHash || null, // Use placeholder data if available
+        isLastVoteForCombination: true, // This is now the latest vote for this combination
       });
 
       await this.userBrandVotesRepository.save(vote);
+
+      // Update any previous votes with the same brand combination to no longer be the last
+      // This enables frontend to know if a user can mint (only last voter can mint)
+      await this.userBrandVotesRepository
+        .createQueryBuilder()
+        .update(UserBrandVotes)
+        .set({ isLastVoteForCombination: false })
+        .where('brand1Id = :b1 AND brand2Id = :b2 AND brand3Id = :b3', {
+          b1: voteData.brandIds[0],
+          b2: voteData.brandIds[1],
+          b3: voteData.brandIds[2],
+        })
+        .andWhere('transactionHash != :txHash', {
+          txHash: voteData.transactionHash,
+        })
+        .execute();
+
+      logger.log(
+        `✅ [INDEXER] Updated isLastVoteForCombination flags for brand combination [${voteData.brandIds.join(', ')}]`,
+      );
 
       if (placeholderClaimData) {
         logger.log(

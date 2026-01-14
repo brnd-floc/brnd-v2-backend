@@ -705,7 +705,7 @@ const PODIUM_CONTRACT_ABI = [
 @Injectable()
 export class PodiumService {
   private readonly PODIUM_CONTRACT_ADDRESS =
-    '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
+    '0x04764d92a9e9Ec8a31CFf832194d772eB04ef129' as `0x${string}`;
   private readonly BASE_PRICE = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly PRICE_INCREMENT = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly REPEAT_FEE_BPS = 1000; // 10%
@@ -1150,12 +1150,20 @@ export class PodiumService {
   }
 
   async getActivity(tokenId: number) {
-    return this.collectibleActivityRepository.find({
+    const activities = await this.collectibleActivityRepository.find({
       where: { tokenId },
       relations: ['fromUser', 'toUser'],
       order: { timestamp: 'DESC' },
       take: 20,
     });
+
+    // Get podium info from any vote with this tokenId
+    const podiumInfo = await this.userBrandVotesRepository.findOne({
+      where: { collectibleTokenId: tokenId },
+      relations: ['brand1', 'brand2', 'brand3'],
+    });
+
+    return { activities, podiumInfo };
   }
   /**
    * Calculate accumulated fees for a podium

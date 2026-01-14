@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class BlockchainBrandDto {
   @IsNumber()
@@ -16,6 +16,10 @@ export class BlockchainBrandDto {
   @IsString()
   @IsNotEmpty()
   handle: string;
+
+  @IsString()
+  @IsOptional()
+  metadataHash?: string;
 
   @IsString()
   @IsNotEmpty()

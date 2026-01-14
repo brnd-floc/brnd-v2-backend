@@ -787,18 +787,30 @@ export class AdminService {
         );
       }
 
+      // Use metadataHash from DTO if provided, otherwise from contract
+      const metadataHash =
+        blockchainBrandDto.metadataHash || contractBrand.metadataHash;
+
+      console.log(
+        `📡 [IPFS] Using metadataHash: ${metadataHash} (from ${blockchainBrandDto.metadataHash ? 'indexer' : 'contract'})`,
+      );
+
       // Fetch metadata from IPFS
       let metadata: any = {};
-      try {
-        metadata = await this.blockchainService.fetchMetadataFromIpfs(
-          contractBrand.metadataHash,
-        );
-        console.log('📡 [IPFS] Successfully fetched metadata:', metadata);
-      } catch (ipfsError) {
-        console.warn(
-          '⚠️  [IPFS] Failed to fetch metadata, using contract data only:',
-          ipfsError.message,
-        );
+      if (metadataHash && metadataHash.length > 0) {
+        try {
+          metadata = await this.blockchainService.fetchMetadataFromIpfs(
+            metadataHash,
+          );
+          console.log('📡 [IPFS] Successfully fetched metadata:', metadata);
+        } catch (ipfsError) {
+          console.warn(
+            '⚠️  [IPFS] Failed to fetch metadata, using contract data only:',
+            ipfsError.message,
+          );
+        }
+      } else {
+        console.warn('⚠️  [IPFS] No metadataHash available, skipping IPFS fetch');
       }
 
       // Get or create category with fallback
@@ -843,7 +855,7 @@ export class AdminService {
         existingBrand.onChainHandle = contractBrand.handle;
         existingBrand.onChainFid = contractBrand.fid;
         existingBrand.onChainWalletAddress = contractBrand.walletAddress;
-        existingBrand.metadataHash = contractBrand.metadataHash;
+        existingBrand.metadataHash = metadataHash;
 
         // Update metadata from IPFS (can be updated)
         existingBrand.name = metadata.name || contractBrand.handle;
@@ -851,10 +863,10 @@ export class AdminService {
         existingBrand.warpcastUrl = metadata.warpcastUrl || metadata.url || '';
         existingBrand.description = metadata.description || '';
         existingBrand.imageUrl = metadata.imageUrl || '';
-        existingBrand.profile = metadata.handle || profile;
-        existingBrand.channel = channel;
-        existingBrand.queryType = queryType;
-        existingBrand.followerCount = followerCount;
+        existingBrand.profile = metadata.profile || profile;
+        existingBrand.channel = metadata.channel || channel;
+        existingBrand.queryType = metadata.queryType ?? queryType;
+        existingBrand.followerCount = metadata.followerCount || followerCount;
         existingBrand.category = category;
 
         // Note: We preserve scoring fields (score, stateScore, etc.) on update
@@ -885,7 +897,7 @@ export class AdminService {
         onChainFid: contractBrand.fid,
         onChainWalletAddress: contractBrand.walletAddress,
         onChainCreatedAt: new Date(contractBrand.createdAt * 1000),
-        metadataHash: contractBrand.metadataHash,
+        metadataHash: metadataHash,
 
         // Metadata from IPFS (can be updated)
         name: metadata.name || contractBrand.handle,
@@ -893,10 +905,10 @@ export class AdminService {
         warpcastUrl: metadata.warpcastUrl || metadata.url || '',
         description: metadata.description || '',
         imageUrl: metadata.imageUrl || '',
-        profile: metadata.handle || profile,
-        channel,
-        queryType,
-        followerCount,
+        profile: metadata.profile || profile,
+        channel: metadata.channel || channel,
+        queryType: metadata.queryType ?? queryType,
+        followerCount: metadata.followerCount || followerCount,
         category,
 
         // Initialize scoring fields

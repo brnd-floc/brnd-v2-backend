@@ -734,6 +734,7 @@ export class BlockchainController {
       );
 
       if (!eligibility.eligible) {
+        console.log('🔑 [PODIUM SIGNATURE] Not eligible:', eligibility.reason);
         throw new ForbiddenException({
           error: 'NOT_ELIGIBLE',
           message:

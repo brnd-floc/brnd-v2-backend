@@ -407,6 +407,7 @@ export class UserService {
         'brand3',
         'collectibleGenesisCreator',
         'collectibleOwner',
+        'user',
       ],
       order: { date: 'DESC' },
       skip: (pageId - 1) * limit,
@@ -420,11 +421,14 @@ export class UserService {
     const data = votes
       .filter((vote) => vote.brand1 && vote.brand2 && vote.brand3)
       .map((vote) => ({
+        user: vote.user,
         id: vote.transactionHash,
         date: vote.date.toISOString(),
         brand1: vote.brand1,
         brand2: vote.brand2,
         brand3: vote.brand3,
+        // Mintability - only the last voter for a combination can mint
+        isLastVoteForCombination: vote.isLastVoteForCombination || false,
         // Collectible data
         isCollectible: vote.isCollectible || false,
         collectibleTokenId: vote.collectibleTokenId || null,

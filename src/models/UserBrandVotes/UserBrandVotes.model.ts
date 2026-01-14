@@ -116,4 +116,9 @@ export class UserBrandVotes {
 
   @Column({ type: 'decimal', precision: 65, scale: 0, nullable: true })
   collectibleTotalFeesEarned: string;
+
+  // Flag indicating if this is the most recent vote for this brand combination
+  // Only the last voter for a combination can mint the collectible
+  @Column({ default: false })
+  isLastVoteForCombination: boolean;
 }

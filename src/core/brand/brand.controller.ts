@@ -945,21 +945,14 @@ export class BrandController {
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      const [podiums, count] = await this.brandService.getRecentPodiums(
+      const { count, data } = await this.brandService.getRecentPodiums(
         page,
         limit,
       );
 
       return hasResponse(res, {
-        podiums: podiums,
-        pagination: {
-          page,
-          limit,
-          total: count,
-          totalPages: Math.ceil(count / limit),
-          hasNextPage: page * limit < count,
-          hasPrevPage: page > 1,
-        },
+        count,
+        data,
       });
     } catch (error) {
       return hasError(

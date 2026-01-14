@@ -1034,12 +1034,12 @@ export class BrandService {
    *
    * @param {number} page - Page number for pagination
    * @param {number} limit - Number of podiums per page
-   * @returns {Promise<[UserBrandVotes[], number]>} Array of votes and total count
+   * @returns {Promise<{ count: number; data: any[] }>} Object containing total count and array of transformed vote data
    */
   async getRecentPodiums(
     page: number = 1,
     limit: number = 20,
-  ): Promise<[UserBrandVotes[], number]> {
+  ): Promise<{ count: number; data: any[] }> {
     // Filter for podiums more recent than 2025-12-12 14:14:14
     const minDate = new Date('2025-12-12T14:14:14');
     console.log(
@@ -1058,12 +1058,14 @@ export class BrandService {
     const count = await baseQuery.getCount();
     console.log('THE COUNT IS', count);
 
-    // Get data with relations
+    // Get data with relations (including collectible relations)
     const podiums = await baseQuery
       .leftJoinAndSelect('vote.user', 'user')
       .leftJoinAndSelect('vote.brand1', 'brand1')
       .leftJoinAndSelect('vote.brand2', 'brand2')
       .leftJoinAndSelect('vote.brand3', 'brand3')
+      .leftJoinAndSelect('vote.collectibleGenesisCreator', 'collectibleGenesisCreator')
+      .leftJoinAndSelect('vote.collectibleOwner', 'collectibleOwner')
       .orderBy('vote.date', 'DESC')
       .skip(skip)
       .take(limit)
@@ -1073,7 +1075,40 @@ export class BrandService {
       `🏆 [BrandService] Found ${count} total podiums, returning ${podiums.length} for this page`,
     );
 
-    return [podiums, count];
+    // Transform data to match the structure returned by getVotesHistory
+    const data = podiums
+      .filter((vote) => vote.brand1 && vote.brand2 && vote.brand3)
+      .map((vote) => ({
+        id: vote.transactionHash,
+        date: vote.date.toISOString(),
+        // User who created the podium
+        user: vote.user
+          ? {
+              fid: vote.user.fid,
+              username: vote.user.username,
+              displayName: vote.user.displayName,
+              pfpUrl: vote.user.pfpUrl,
+            }
+          : null,
+        brand1: vote.brand1,
+        brand2: vote.brand2,
+        brand3: vote.brand3,
+        // Mintability - only the last voter for a combination can mint
+        isLastVoteForCombination: vote.isLastVoteForCombination || false,
+        // Collectible data
+        isCollectible: vote.isCollectible || false,
+        collectibleTokenId: vote.collectibleTokenId || null,
+        collectiblePrice: vote.collectiblePrice || null,
+        collectibleClaimCount: vote.collectibleClaimCount || 0,
+        collectibleGenesisCreatorFid: vote.collectibleGenesisCreatorFid || null,
+        collectibleGenesisCreatorUsername:
+          vote.collectibleGenesisCreator?.username || null,
+        collectibleOwnerFid: vote.collectibleOwnerFid || null,
+        collectibleOwnerUsername: vote.collectibleOwner?.username || null,
+        collectibleTotalFeesEarned: vote.collectibleTotalFeesEarned || '0',
+      }));
+
+    return { count, data };
   }
 
   /**

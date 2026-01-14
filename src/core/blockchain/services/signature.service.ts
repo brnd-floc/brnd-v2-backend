@@ -537,7 +537,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
+      '0x04764d92a9e9Ec8a31CFf832194d772eB04ef129' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',
@@ -619,7 +619,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0x529648D4AC34354F1A37C6fe0f4B6090Ed86fB9e' as `0x${string}`;
+      '0x04764d92a9e9Ec8a31CFf832194d772eB04ef129' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',
