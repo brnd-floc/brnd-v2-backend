@@ -1056,7 +1056,6 @@ export class BrandService {
 
     // Get count first (without joins for speed)
     const count = await baseQuery.getCount();
-    console.log('THE COUNT IS', count);
 
     // Get data with relations (including collectible relations)
     const podiums = await baseQuery
@@ -1064,7 +1063,10 @@ export class BrandService {
       .leftJoinAndSelect('vote.brand1', 'brand1')
       .leftJoinAndSelect('vote.brand2', 'brand2')
       .leftJoinAndSelect('vote.brand3', 'brand3')
-      .leftJoinAndSelect('vote.collectibleGenesisCreator', 'collectibleGenesisCreator')
+      .leftJoinAndSelect(
+        'vote.collectibleGenesisCreator',
+        'collectibleGenesisCreator',
+      )
       .leftJoinAndSelect('vote.collectibleOwner', 'collectibleOwner')
       .orderBy('vote.date', 'DESC')
       .skip(skip)
@@ -1086,14 +1088,15 @@ export class BrandService {
           ? {
               fid: vote.user.fid,
               username: vote.user.username,
-              displayName: vote.user.displayName,
-              pfpUrl: vote.user.pfpUrl,
+              photoUrl: vote.user.photoUrl,
             }
           : null,
         brand1: vote.brand1,
         brand2: vote.brand2,
         brand3: vote.brand3,
         // Mintability - only the last voter for a combination can mint
+        brndPaidWhenCreatingPodium: vote.brndPaidWhenCreatingPodium,
+        claimed: vote.claimTxHash !== null,
         isLastVoteForCombination: vote.isLastVoteForCombination || false,
         // Collectible data
         isCollectible: vote.isCollectible || false,
@@ -1106,6 +1109,7 @@ export class BrandService {
         collectibleOwnerFid: vote.collectibleOwnerFid || null,
         collectibleOwnerUsername: vote.collectibleOwner?.username || null,
         collectibleTotalFeesEarned: vote.collectibleTotalFeesEarned || '0',
+        collectibleOwner: vote.collectibleOwner || null,
       }));
 
     return { count, data };
@@ -1284,9 +1288,11 @@ export class BrandService {
 
     // Update brand metrics asynchronously after vote
     setImmediate(() => {
-      Promise.all(brandIds.map(brandId => 
-        this.brandMetricsService.updateBrandMetrics(brandId)
-      )).catch(error => {
+      Promise.all(
+        brandIds.map((brandId) =>
+          this.brandMetricsService.updateBrandMetrics(brandId),
+        ),
+      ).catch((error) => {
         this.logger.error('Failed to update brand metrics after vote:', error);
       });
     });

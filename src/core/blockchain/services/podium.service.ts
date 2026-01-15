@@ -4,8 +4,9 @@ import { Repository } from 'typeorm';
 import { createPublicClient, http, keccak256, encodeAbiParameters } from 'viem';
 import { base } from 'viem/chains';
 
-import { CollectibleActivity, UserBrandVotes } from '../../../models';
+import { CollectibleActivity, User, UserBrandVotes } from '../../../models';
 import { logger } from '../../../main';
+import { UserService } from 'src/core/user/services/user.service';
 
 // Podium Contract ABI
 const PODIUM_CONTRACT_ABI = [
@@ -717,6 +718,8 @@ export class PodiumService {
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
     @InjectRepository(CollectibleActivity)
     private readonly collectibleActivityRepository: Repository<CollectibleActivity>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {
     this.publicClient = createPublicClient({
       chain: base,
@@ -744,6 +747,12 @@ export class PodiumService {
       logger.log(
         `🏆 [COLLECTIBLE] Processing mint for Token #${data.tokenId}, Brands: [${data.brandIds.join(', ')}]`,
       );
+      console.log('THE DATA HERE IS', data);
+      const user = await this.userRepository.findOne({
+        where: {
+          fid: data.ownerFid,
+        },
+      });
 
       const result = await this.userBrandVotesRepository
         .createQueryBuilder()
@@ -753,6 +762,7 @@ export class PodiumService {
           collectibleTokenId: data.tokenId,
           collectibleOwnerFid: data.ownerFid,
           collectibleOwnerWallet: data.ownerWallet,
+          collectibleOwner: user || null,
           collectiblePrice: data.price,
           collectibleMintTxHash: data.txHash,
           collectibleGenesisCreatorFid: data.ownerFid,
@@ -764,6 +774,8 @@ export class PodiumService {
           b3: data.brandIds[2],
         })
         .execute();
+
+      console.log('THE RESULT HERE IS', result);
 
       logger.log(
         `✅ [COLLECTIBLE] Mint processed - Token #${data.tokenId} - Updated ${result.affected} votes`,
