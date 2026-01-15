@@ -378,6 +378,7 @@ export class IndexerService {
         );
         // Add level-based leaderboard points for the claim (since we merged claim data)
         // User gets brndPowerLevel * 3 additional points
+
         const claimLeaderboardPoints = user.brndPowerLevel * 3;
         await this.userService.addPoints(user.id, claimLeaderboardPoints);
         logger.log(
@@ -779,20 +780,20 @@ export class IndexerService {
         logger.log(
           `📝 [INDEXER] Updating user ${user.id} power level from ${user.brndPowerLevel} to ${levelUpData.brndPowerLevel}`,
         );
-
-        await this.userRepository.update(
-          { id: user.id },
-          {
-            brndPowerLevel: levelUpData.brndPowerLevel,
-            address: levelUpData.wallet,
-            updatedAt: levelUpDate,
-          },
-        );
+        if (user.brndPowerLevel < levelUpData.brndPowerLevel) {
+          await this.userRepository.update(
+            { id: user.id },
+            {
+              brndPowerLevel: levelUpData.brndPowerLevel,
+              address: levelUpData.wallet,
+              updatedAt: levelUpDate,
+            },
+          );
+          logger.log(
+            `✅ [INDEXER] User level update completed: ${levelUpData.levelUpId}`,
+          );
+        }
       }
-
-      logger.log(
-        `✅ [INDEXER] User level update completed: ${levelUpData.levelUpId}`,
-      );
     } catch (error) {
       logger.error(
         `❌ [INDEXER] Error processing user level update ${levelUpData.levelUpId}:`,
