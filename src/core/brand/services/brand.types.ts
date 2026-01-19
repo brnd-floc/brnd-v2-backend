@@ -16,4 +16,5 @@ export type BrandResponse = {
   brand: Brand;
   casts: BrandCast[];
   fanCount: number;
+  voteTrend7d: number;
 };

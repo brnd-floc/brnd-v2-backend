@@ -202,6 +202,7 @@ export class BrandController {
         'rankingMonth',
         'banned',
         'scoreDay',
+        'createdAt',
       ],
       [],
       order,

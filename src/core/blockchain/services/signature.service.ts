@@ -509,43 +509,44 @@ export class SignatureService {
     fid: number,
     walletAddress: string,
     brandIds: [number, number, number],
+    metadataURI: string,  // ← NEW PARAM
     deadline: number,
   ): Promise<string> {
     logger.log(
       `🏆 [PODIUM SIGNATURE] Generating claim signature for FID: ${fid}, Brands: [${brandIds.join(', ')}]`,
     );
-
+  
     if (!process.env.PRIVATE_KEY) {
       throw new Error('PRIVATE_KEY environment variable is not set');
     }
-
-    // Get nonce from contract
+  
     const nonce = await this.podiumService.getFidNonce(fid);
     logger.log(`🏆 [PODIUM SIGNATURE] Current nonce: ${nonce}`);
-
+  
     const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
       ? (process.env.PRIVATE_KEY as `0x${string}`)
       : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
-
+  
     const account = privateKeyToAccount(privateKey);
     console.log('🔑 [PODIUM SIGNATURE] Signer address:', account.address);
-
+  
     const walletClient = createWalletClient({
       account,
       chain: base,
       transport: http(),
     });
-
+  
     const PODIUM_CONTRACT_ADDRESS =
-      '0x04764d92a9e9Ec8a31CFf832194d772eB04ef129' as `0x${string}`;
-
+      '0x78E84851343DD61594a6588A38d1B154435B5dB2' as `0x${string}`;  // ← UPDATED
+  
     const domain = {
       name: 'BRNDPodiumCollectables',
       version: '1',
       chainId: 8453,
       verifyingContract: PODIUM_CONTRACT_ADDRESS,
     } as const;
-
+  
+    // UPDATED - includes metadataURI
     const types = {
       ClaimPodium: [
         { name: 'brand1', type: 'uint16' },
@@ -553,13 +554,14 @@ export class SignatureService {
         { name: 'brand3', type: 'uint16' },
         { name: 'fid', type: 'uint256' },
         { name: 'price', type: 'uint256' },
+        { name: 'metadataURI', type: 'string' },  // ← NEW
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
       ],
     } as const;
-
-    const BASE_PRICE = BigInt('1000000000000000000000000'); // 1,000,000 BRND
-
+  
+    const BASE_PRICE = BigInt('1000000000000000000000000');
+  
     const signature = await walletClient.signTypedData({
       account,
       domain,
@@ -571,11 +573,12 @@ export class SignatureService {
         brand3: brandIds[2],
         fid: BigInt(fid),
         price: BASE_PRICE,
+        metadataURI: metadataURI,  // ← NEW
         nonce: nonce,
         deadline: BigInt(deadline),
       },
     });
-
+  
     logger.log(`✅ [PODIUM SIGNATURE] Claim signature generated: ${signature}`);
     return signature;
   }
@@ -619,7 +622,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0x04764d92a9e9Ec8a31CFf832194d772eB04ef129' as `0x${string}`;
+      '0x78e84851343dd61594a6588a38d1b154435b5db2' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',
@@ -697,7 +700,7 @@ export class SignatureService {
     });
 
     const PODIUM_CONTRACT_ADDRESS =
-      '0xe14A1b3f3314De3EBadBc30bFB3a91D4aC49Bd06' as `0x${string}`;
+      '0x78e84851343dd61594a6588a38d1b154435b5db2' as `0x${string}`;
 
     const domain = {
       name: 'BRNDPodiumCollectables',

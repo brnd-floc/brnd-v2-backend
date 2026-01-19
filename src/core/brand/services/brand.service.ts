@@ -826,6 +826,40 @@ export class BrandService {
 
       const totalFans = parseInt(fanCount?.count || '0');
 
+      // Calculate 7-day vote trend (podium appearances)
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+      // Votes in last 7 days
+      const last7DaysCount = await this.userBrandVotesRepository
+        .createQueryBuilder('vote')
+        .select('COUNT(*)', 'count')
+        .where(
+          '(vote.brand1Id = :brandId OR vote.brand2Id = :brandId OR vote.brand3Id = :brandId)',
+          { brandId: id },
+        )
+        .andWhere('vote.date >= :start', { start: sevenDaysAgo })
+        .getRawOne();
+
+      // Votes in previous 7 days (days 8-14)
+      const prev7DaysCount = await this.userBrandVotesRepository
+        .createQueryBuilder('vote')
+        .select('COUNT(*)', 'count')
+        .where(
+          '(vote.brand1Id = :brandId OR vote.brand2Id = :brandId OR vote.brand3Id = :brandId)',
+          { brandId: id },
+        )
+        .andWhere('vote.date >= :start AND vote.date < :end', {
+          start: fourteenDaysAgo,
+          end: sevenDaysAgo,
+        })
+        .getRawOne();
+
+      const voteTrend7d =
+        parseInt(last7DaysCount?.count || '0') -
+        parseInt(prev7DaysCount?.count || '0');
+
       // Fetch Neynar data (existing logic)
       const neynar = new NeynarService();
       let info;
@@ -849,6 +883,7 @@ export class BrandService {
         },
         casts: info || [],
         fanCount: totalFans,
+        voteTrend7d,
       };
     } catch (error) {
       Logger.error(`Error fetching brand with id ${id}: ${error.message}`);
@@ -889,44 +924,25 @@ export class BrandService {
       );
     }
 
+    // Build order clause based on order parameter
+    let orderClause: any = { score: 'DESC' }; // default
+    if (order === 'new') {
+      orderClause = { createdAt: 'DESC' };
+    } else if (order === 'top') {
+      orderClause = { score: 'DESC', followerCount: 'DESC' };
+    }
+
     // For all-time scoring or non-score-based ordering, use original logic
     return this.brandRepository.findAndCount({
-      ...(select.length > 0 && {
-        select,
-      }),
-
+      ...(select.length > 0 && { select }),
       skip,
       take: limit,
-
       where: {
-        ...(hasSearch && {
-          name: Like(`${searchName}%`),
-        }),
-        banned: 0, // Filter out banned brands
+        ...(hasSearch && { name: Like(`${searchName}%`) }),
+        banned: 0,
       },
-
-      ...(relations.length > 0 && {
-        relations,
-      }),
-
-      ...(order === 'all' && {
-        order: {
-          score: 'DESC', // Use all-time score for 'all' period
-        },
-      }),
-
-      ...(order === 'new' && {
-        order: {
-          createdAt: 'DESC',
-        },
-      }),
-
-      ...(order === 'top' && {
-        order: {
-          score: 'DESC', // Use all-time score for 'all' period
-          followerCount: 'DESC',
-        },
-      }),
+      ...(relations.length > 0 && { relations }),
+      order: orderClause,
     });
   }
 

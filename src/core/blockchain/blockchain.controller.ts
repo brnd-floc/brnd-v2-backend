@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   UseGuards,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
@@ -24,7 +25,7 @@ import {
 } from '../../security/guards';
 import { Session } from '../../security/decorators';
 
-import { HttpStatus } from '../../utils';
+import { HttpStatus, IpfsService } from '../../utils';
 import {
   BadRequestException,
   ForbiddenException,
@@ -58,6 +59,7 @@ export class BlockchainController {
     private readonly indexerService: IndexerService,
     private readonly adminService: AdminService,
     private readonly podiumService: PodiumService,
+    private readonly ipfsService: IpfsService,
   ) {}
 
   @Post('/authorize-wallet')
@@ -707,76 +709,96 @@ export class BlockchainController {
    * Generates an EIP-712 signature authorizing a user to claim (mint) a new podium NFT
    */
   @Post('/podium/claim-signature')
-  @UseGuards(AuthorizationGuard)
-  async claimPodiumSignature(
-    @Session() session: QuickAuthPayload,
-    @Body() body: ClaimPodiumSignatureDto,
-  ) {
-    try {
-      logger.log(
-        `🏆 [PODIUM] Claim signature request for FID: ${session.sub}, Brands: [${body.brandIds.join(', ')}]`,
-      );
+@UseGuards(AuthorizationGuard)
+async claimPodiumSignature(
+  @Session() session: QuickAuthPayload,
+  @Body() body: ClaimPodiumSignatureDto,
+) {
+  try {
+    logger.log(
+      `🏆 [PODIUM] Claim signature request for FID: ${session.sub}, Brands: [${body.brandIds.join(', ')}]`,
+    );
 
-      const { walletAddress, brandIds, deadline } = body;
+    const { walletAddress, brandIds, deadline } = body;
 
-      // Validate deadline (not more than 24 hours in the future)
-      const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
-      if (deadline > maxDeadline) {
-        throw new BadRequestException(
-          'Deadline cannot be more than 24 hours in the future',
-        );
-      }
-
-      // Check eligibility
-      const eligibility = await this.podiumService.checkClaimEligibility(
-        session.sub,
-        brandIds,
-      );
-
-      if (!eligibility.eligible) {
-        console.log('🔑 [PODIUM SIGNATURE] Not eligible:', eligibility.reason);
-        throw new ForbiddenException({
-          error: 'NOT_ELIGIBLE',
-          message:
-            eligibility.reason || 'User not eligible to claim this podium',
-        });
-      }
-
-      console.log('🔑 [PODIUM SIGNATURE] Signer address:', walletAddress);
-      console.log('🔑 [PODIUM SIGNATURE] FID:', session.sub);
-      console.log('🔑 [PODIUM SIGNATURE] Brands:', brandIds);
-      console.log('🔑 [PODIUM SIGNATURE] Deadline:', deadline);
-      // Generate signature
-      const signature =
-        await this.signatureService.generateClaimPodiumSignature(
-          session.sub,
-          walletAddress,
-          brandIds,
-          deadline,
-        );
-
-      const BASE_PRICE = '1000000000000000000000000'; // 1,000,000 BRND
-
-      return {
-        signature,
-        price: BASE_PRICE,
-        eligible: true,
-        reason: null,
-      };
-    } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-
-      logger.error('Failed to generate claim podium signature:', error);
-      throw new InternalServerErrorException(
-        error.message || 'Failed to generate claim podium signature',
+    // Validate deadline
+    const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+    if (deadline > maxDeadline) {
+      throw new BadRequestException(
+        'Deadline cannot be more than 24 hours in the future',
       );
     }
+
+    // Check eligibility
+    const eligibility = await this.podiumService.checkClaimEligibility(
+      session.sub,
+      brandIds,
+    );
+
+    if (!eligibility.eligible) {
+      throw new ForbiddenException({
+        error: 'NOT_ELIGIBLE',
+        message: eligibility.reason || 'User not eligible to claim this podium',
+      });
+    }
+
+    // ========== NEW: Generate metadata ==========
+    
+    // 1. Generate podium image and upload to IPFS
+    const imageURI = await this.podiumService.generateAndUploadPodiumImage(brandIds);
+    
+    // 2. Get brand names for metadata
+    const brandNames = await this.podiumService.getBrandNames(brandIds);
+    
+    // 3. Create metadata JSON
+    const metadata = {
+      name: `BRND Podium`,
+      description: 'Brands are stories in motion. And the world runs on them.',
+      image: imageURI,
+      attributes: [
+        { trait_type: 'Gold', value: brandNames[0] },
+        { trait_type: 'Silver', value: brandNames[1] },
+        { trait_type: 'Bronze', value: brandNames[2] },
+        { trait_type: 'Minter FID', value: session.sub.toString() },
+      ],
+    };
+    
+    // 4. Upload metadata to IPFS
+    const metadataURI = await this.ipfsService.uploadJsonToIpfs(metadata);
+    
+    // ========== END NEW ==========
+
+    // Generate signature (now includes metadataURI)
+    const signature = await this.signatureService.generateClaimPodiumSignature(
+      session.sub,
+      walletAddress,
+      brandIds,
+      metadataURI,  // ← NEW PARAM
+      deadline,
+    );
+
+    const BASE_PRICE = '1000000000000000000000000';
+
+    return {
+      signature,
+      price: BASE_PRICE,
+      eligible: true,
+      reason: null,
+      metadataURI,  // ← NEW RESPONSE FIELD
+    };
+  } catch (error) {
+    if (
+      error instanceof BadRequestException ||
+      error instanceof ForbiddenException
+    ) {
+      throw error;
+    }
+    logger.error('Failed to generate claim podium signature:', error);
+    throw new InternalServerErrorException(
+      error.message || 'Failed to generate claim podium signature',
+    );
   }
+}
 
   /**
    * Buy Podium Signature
@@ -969,5 +991,86 @@ export class BlockchainController {
   @UseGuards(AuthorizationGuard)
   async getCollectibleActivity(@Param('tokenId') tokenId: number) {
     return this.podiumService.getActivity(tokenId);
+  }
+
+  /**
+   * Test endpoint for NFT image generation
+   * Generates a test NFT image from a random existing vote
+   * Returns the image as PNG or uploads to IPFS based on query param
+   */
+  @Get('/podium/test-nft-image')
+  async testNFTImageGeneration() {
+    try {
+      logger.log(`🧪 [TEST] Generating test NFT image`);
+
+      const result = await this.podiumService.generateTestNFTImage();
+
+      // Upload to IPFS for testing
+      const fileName = `test_podium_${result.brandIds.join('_')}_${Date.now()}.png`;
+      const imageUri = await this.ipfsService.uploadFileToIpfs(
+        result.buffer,
+        fileName,
+        'image/png',
+      );
+
+      // Create test metadata
+      const metadata = {
+        name: `BRND Podium`,
+        description: 'Brands are stories in motion. And the world runs on them.',
+        image: imageUri,
+        attributes: [
+          { trait_type: 'Gold', value: result.brandNames[0] },
+          { trait_type: 'Silver', value: result.brandNames[1] },
+          { trait_type: 'Bronze', value: result.brandNames[2] },
+        ],
+      };
+
+      // Upload metadata to IPFS
+      const metadataUri = await this.ipfsService.uploadJsonToIpfs(metadata);
+
+      return {
+        success: true,
+        message: 'Test NFT image generated and uploaded successfully',
+        data: {
+          brandIds: result.brandIds,
+          brandNames: result.brandNames,
+          nextTokenId: result.nextTokenId,
+          imageUri,
+          metadataUri,
+          metadata,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to generate test NFT image:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate test NFT image',
+      );
+    }
+  }
+
+  /**
+   * Test endpoint that returns the actual PNG image
+   * View directly in browser: /blockchain-service/podium/test-nft-image/preview
+   */
+  @Get('/podium/test-nft-image/preview')
+  async testNFTImagePreview(@Param() params: any, @Body() body: any) {
+    try {
+      logger.log(`🧪 [TEST] Generating preview NFT image`);
+
+      const result = await this.podiumService.generateTestNFTImage();
+
+      logger.log(`🧪 [TEST] Preview generated for brands: [${result.brandIds.join(', ')}] - ${result.brandNames.join(', ')}`);
+
+      // Return raw PNG image that can be viewed in browser
+      return new StreamableFile(result.buffer, {
+        type: 'image/png',
+        disposition: `inline; filename="podium_${result.brandIds.join('_')}.png"`,
+      });
+    } catch (error) {
+      logger.error('Failed to generate test NFT image:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate test NFT image',
+      );
+    }
   }
 }
