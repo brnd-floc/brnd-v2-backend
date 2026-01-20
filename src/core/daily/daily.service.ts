@@ -6,6 +6,7 @@ import { Repository, MoreThan } from 'typeorm';
 import { User, UserBrandVotes } from '../../models';
 import { UserService } from '../user/services';
 import { AirdropService } from '../airdrop/services/airdrop.service';
+import { IndexerSyncService } from '../blockchain/services/indexer-sync.service';
 import { logger } from '../../main';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class DailyService {
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
     private readonly userService: UserService,
     private readonly airdropService: AirdropService,
+    private readonly indexerSyncService: IndexerSyncService,
   ) {}
 
   /**
@@ -222,6 +224,70 @@ export class DailyService {
       return result;
     } catch (error) {
       logger.error('❌ [DAILY] Manual airdrop calculation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Daily indexer sync job that runs at 01:00 UTC every day
+   * Syncs user power levels and votes from the PostgreSQL indexer to MySQL
+   * Uses a 48-hour window to catch any missed data with a 1-day buffer
+   */
+  @Cron('0 1 * * *', {
+    name: 'indexerSync',
+    timeZone: 'UTC',
+  })
+  async handleIndexerSync(): Promise<void> {
+    console.log(
+      '🔄 [CRON] Indexer sync cron job triggered at:',
+      new Date().toISOString(),
+    );
+    logger.log('🔄 [DAILY] Starting daily indexer sync at 01:00 UTC');
+
+    try {
+      const stats = await this.indexerSyncService.sync({
+        windowHours: 48, // 48-hour window for daily sync
+        syncPowerLevels: true,
+        syncVotes: true,
+      });
+
+      logger.log('✅ [DAILY] Indexer sync completed', {
+        usersUpdated: stats.usersUpdated,
+        votesInserted: stats.votesInserted,
+        errors: stats.errors.length,
+      });
+
+      if (stats.errors.length > 0) {
+        logger.warn(
+          `⚠️ [DAILY] ${stats.errors.length} errors during indexer sync`,
+        );
+      }
+    } catch (error) {
+      logger.error('❌ [DAILY] Error during indexer sync:', error);
+      // Don't throw - we want the cron to continue running
+    }
+  }
+
+  /**
+   * Manual trigger for indexer sync with custom window
+   * @param windowHours - Number of hours to look back (0 for full sync)
+   */
+  async triggerManualIndexerSync(windowHours: number = 48): Promise<any> {
+    logger.log(
+      `🔧 [DAILY] Manual indexer sync triggered (window: ${windowHours === 0 ? 'FULL' : windowHours + 'h'})`,
+    );
+
+    try {
+      const stats = await this.indexerSyncService.sync({
+        windowHours,
+        syncPowerLevels: true,
+        syncVotes: true,
+      });
+
+      logger.log('✅ [DAILY] Manual indexer sync completed successfully');
+      return stats;
+    } catch (error) {
+      logger.error('❌ [DAILY] Manual indexer sync failed:', error);
       throw error;
     }
   }

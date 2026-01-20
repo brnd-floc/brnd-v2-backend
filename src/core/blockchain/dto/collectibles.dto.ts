@@ -28,6 +28,9 @@ export class CollectibleMintedDto {
 
   @IsString()
   txHash: string;
+
+  @IsString()
+  metadataURI: string;
 }
 
 export class CollectibleBoughtDto {

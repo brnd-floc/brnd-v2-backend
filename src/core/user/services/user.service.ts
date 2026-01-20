@@ -251,13 +251,14 @@ export class UserService {
     }
 
     user.points += points;
+    user.totalS2Points += points;
     const updatedUser = await this.userRepository.save(user);
 
     // Invalidate leaderboard cache for real-time updates
     this.invalidateLeaderboardCache();
 
     console.log(
-      `💰 [UserService] Added ${points} points to user ${userId}, total: ${user.points}`,
+      `💰 [UserService] Added ${points} points to user ${userId}, total: ${user.points}, S2: ${user.totalS2Points}`,
     );
 
     return updatedUser;

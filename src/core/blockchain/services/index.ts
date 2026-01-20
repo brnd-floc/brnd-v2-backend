@@ -5,6 +5,7 @@ export { RewardService } from './reward.service';
 export { CastVerificationService } from './cast-verification.service';
 export { ContractUploadService } from './contract-upload.service';
 export { IndexerService } from './indexer.service';
+export { IndexerSyncService } from './indexer-sync.service';
 export { DataRepairService } from './data-repair.service';
 export { BrandSyncService } from './brand-sync.service';
 export { PodiumService } from './podium.service';

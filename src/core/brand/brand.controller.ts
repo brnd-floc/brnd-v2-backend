@@ -19,6 +19,7 @@ import { BrandOrderType, BrandResponse, BrandService } from './services';
 import { BrandSeederService } from './services/brand-seeding.service';
 import { UserService } from '../user/services/user.service';
 import { RewardService } from '../blockchain/services/reward.service';
+import { BlockchainService } from '../blockchain/services/blockchain.service';
 
 // Models
 import { Brand, CurrentUser } from '../../models';
@@ -44,6 +45,7 @@ export class BrandController {
     private readonly userService: UserService,
     private readonly rewardService: RewardService,
     private readonly brandSchedulerService: BrandSchedulerService,
+    private readonly blockchainService: BlockchainService,
   ) {}
 
   @Get('/brand/:id')
@@ -573,7 +575,21 @@ export class BrandController {
             // Do nothing, skip claim sig on error
           }
         }
-        const pointsForVote = 3 + updatedUser.brndPowerLevel * 3;
+        // Read brndPowerLevel from contract (source of truth)
+        let contractLevel = updatedUser.brndPowerLevel;
+        try {
+          const contractInfo =
+            await this.blockchainService.getUserInfoFromContractByFid(
+              dbUser.fid,
+            );
+          contractLevel =
+            contractInfo?.brndPowerLevel ?? updatedUser.brndPowerLevel;
+        } catch (err) {
+          logger.warn(
+            `⚠️ Could not read contract level for FID ${dbUser.fid}, using DB level ${updatedUser.brndPowerLevel}`,
+          );
+        }
+        const pointsForVote = 3 + contractLevel * 3;
 
         const responsePayload = {
           verified: true,

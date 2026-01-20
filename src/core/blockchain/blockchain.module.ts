@@ -12,6 +12,7 @@ import { IndexerService } from './services/indexer.service';
 import { DataRepairService } from './services/data-repair.service';
 import { BrandSyncService } from './services/brand-sync.service';
 import { PodiumService } from './services/podium.service';
+import { IndexerSyncService } from './services/indexer-sync.service';
 import { UserService } from '../user/services';
 import { AdminService } from '../admin/services/admin.service';
 import { IpfsService } from '../../utils/ipfs.service';
@@ -56,6 +57,7 @@ import {
     CastVerificationService,
     ContractUploadService,
     IndexerService,
+    IndexerSyncService,
     DataRepairService,
     BrandSyncService,
     UserService,
@@ -71,6 +73,7 @@ import {
     CastVerificationService,
     ContractUploadService,
     IndexerService,
+    IndexerSyncService,
     DataRepairService,
     BrandSyncService,
   ],

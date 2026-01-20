@@ -117,8 +117,20 @@ export class UserBrandVotes {
   @Column({ type: 'decimal', precision: 65, scale: 0, nullable: true })
   collectibleTotalFeesEarned: string;
 
+  // IPFS metadata URI for the collectible NFT (e.g., "ipfs://bafkrei...")
+  @Column({ nullable: true })
+  collectibleMetadataURI: string;
+
   // Flag indicating if this is the most recent vote for this brand combination
   // Only the last voter for a combination can mint the collectible
   @Column({ default: false })
   isLastVoteForCombination: boolean;
+
+  // Total points earned from this vote (3 points for voting + brndPowerLevel * 3 when claimed)
+  @Column({ nullable: true })
+  pointsEarned: number;
+
+  // Season number (1 = before Dec 13 2025, 2 = Dec 13 2025 onwards)
+  @Column({ nullable: true })
+  season: number;
 }

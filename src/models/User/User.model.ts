@@ -45,6 +45,16 @@ export class User {
   points: number;
 
   @Column({
+    default: 0,
+  })
+  totalS1Points: number;
+
+  @Column({
+    default: 0,
+  })
+  totalS2Points: number;
+
+  @Column({
     type: 'enum',
     enum: UserRoleEnum,
     default: UserRoleEnum.USER,

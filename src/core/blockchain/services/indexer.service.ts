@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, Not, IsNull } from 'typeorm';
 
 import { Brand, User, UserBrandVotes } from '../../../models';
 import { UserService } from '../../user/services';
 import { BrandService } from '../../brand/services';
+import { BlockchainService } from './blockchain.service';
 import { logger } from '../../../main';
 import { getConfig } from '../../../security/config';
 import {
@@ -27,6 +28,8 @@ export class IndexerService {
     private readonly userService: UserService,
     private readonly brandService: BrandService,
     private readonly podiumService: PodiumService,
+    @Inject(forwardRef(() => BlockchainService))
+    private readonly blockchainService: BlockchainService,
   ) {}
 
   /**
@@ -330,6 +333,7 @@ export class IndexerService {
 
       // Create the vote record
       // If we found a placeholder, merge the claim data into the vote
+      // Initial points for voting is 3; will be updated when claimed
       const vote = this.userBrandVotesRepository.create({
         id: voteData.transactionHash, // Use transaction hash as id
         user: { id: user.id },
@@ -348,6 +352,7 @@ export class IndexerService {
         claimedAt: placeholderClaimData?.claimedAt || null, // Use placeholder data if available
         claimTxHash: placeholderClaimData?.claimTxHash || null, // Use placeholder data if available
         isLastVoteForCombination: true, // This is now the latest vote for this combination
+        pointsEarned: 3, // Initial 3 points for voting
       });
 
       await this.userBrandVotesRepository.save(vote);
@@ -378,11 +383,33 @@ export class IndexerService {
         );
         // Add level-based leaderboard points for the claim (since we merged claim data)
         // User gets brndPowerLevel * 3 additional points
+        // Read brndPowerLevel from contract (source of truth)
 
-        const claimLeaderboardPoints = user.brndPowerLevel * 3;
+        let contractLevel = user.brndPowerLevel;
+        try {
+          const contractInfo =
+            await this.blockchainService.getUserInfoFromContractByFid(user.fid);
+          contractLevel = contractInfo?.brndPowerLevel ?? user.brndPowerLevel;
+        } catch (err) {
+          logger.warn(
+            `⚠️ [INDEXER] Could not read contract level for FID ${user.fid}, using DB level ${user.brndPowerLevel}`,
+          );
+        }
+
+        const claimLeaderboardPoints = contractLevel * 3;
         await this.userService.addPoints(user.id, claimLeaderboardPoints);
         logger.log(
-          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${user.id} (level ${user.brndPowerLevel})`,
+          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${user.id} (contract level ${contractLevel})`,
+        );
+
+        // Update the vote's pointsEarned to include claim points
+        const totalPointsEarned = 3 + claimLeaderboardPoints;
+        await this.userBrandVotesRepository.update(
+          { transactionHash: voteData.transactionHash },
+          { pointsEarned: totalPointsEarned },
+        );
+        logger.log(
+          `✅ [INDEXER] Updated vote pointsEarned to ${totalPointsEarned} for tx ${voteData.transactionHash}`,
         );
       } else {
         logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
@@ -595,6 +622,28 @@ export class IndexerService {
           `📝 [INDEXER] Updating UserBrandVotes with reward claim data for FID ${claimData.fid}, day ${dayNumber}`,
         );
 
+        // Add level-based leaderboard points when reward is claimed
+        // User gets brndPowerLevel * 3 additional points
+        // Read brndPowerLevel from contract (source of truth)
+        let contractLevel = userVote.user.brndPowerLevel;
+        try {
+          const contractInfo =
+            await this.blockchainService.getUserInfoFromContractByFid(
+              userVote.user.fid,
+            );
+          contractLevel =
+            contractInfo?.brndPowerLevel ?? userVote.user.brndPowerLevel;
+        } catch (err) {
+          logger.warn(
+            `⚠️ [INDEXER] Could not read contract level for FID ${userVote.user.fid}, using DB level ${userVote.user.brndPowerLevel}`,
+          );
+        }
+
+        const claimLeaderboardPoints = contractLevel * 3;
+
+        // Calculate total points earned: 3 (voting) + claim points
+        const totalPointsEarned = 3 + claimLeaderboardPoints;
+
         await this.userBrandVotesRepository.update(
           { transactionHash: userVote.transactionHash },
           {
@@ -604,22 +653,20 @@ export class IndexerService {
             shared: true,
             shareVerified: true,
             shareVerifiedAt: claimDate,
+            pointsEarned: totalPointsEarned,
           },
         );
 
         logger.log(
-          `✅ [INDEXER] Updated UserBrandVotes: ${userVote.transactionHash}`,
+          `✅ [INDEXER] Updated UserBrandVotes: ${userVote.transactionHash} with pointsEarned: ${totalPointsEarned}`,
         );
 
-        // Add level-based leaderboard points when reward is claimed
-        // User gets brndPowerLevel * 3 additional points
-        const claimLeaderboardPoints = userVote.user.brndPowerLevel * 3;
         await this.userService.addPoints(
           userVote.user.id,
           claimLeaderboardPoints,
         );
         logger.log(
-          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${userVote.user.id} (level ${userVote.user.brndPowerLevel})`,
+          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${userVote.user.id} (contract level ${contractLevel})`,
         );
       } else {
         // Edge case: Claim event came before vote event

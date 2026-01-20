@@ -123,12 +123,14 @@ export class PodiumService implements OnModuleInit {
     ownerWallet: string;
     price: string;
     txHash: string;
+    metadataURI: string;
   }): Promise<{ affected: number }> {
     try {
       logger.log(
         `🏆 [COLLECTIBLE] Processing mint for Token #${data.tokenId}, Brands: [${data.brandIds.join(', ')}]`,
       );
-      console.log('THE DATA HERE IS', data);
+      logger.log(`🏆 [COLLECTIBLE] Metadata URI: ${data.metadataURI}`);
+
       const user = await this.userRepository.findOne({
         where: {
           fid: data.ownerFid,
@@ -148,6 +150,7 @@ export class PodiumService implements OnModuleInit {
           collectibleMintTxHash: data.txHash,
           collectibleGenesisCreatorFid: data.ownerFid,
           collectibleClaimCount: 1,
+          collectibleMetadataURI: data.metadataURI,
         })
         .where('brand1Id = :b1 AND brand2Id = :b2 AND brand3Id = :b3', {
           b1: data.brandIds[0],
@@ -155,8 +158,6 @@ export class PodiumService implements OnModuleInit {
           b3: data.brandIds[2],
         })
         .execute();
-
-      console.log('THE RESULT HERE IS', result);
 
       logger.log(
         `✅ [COLLECTIBLE] Mint processed - Token #${data.tokenId} - Updated ${result.affected} votes`,
