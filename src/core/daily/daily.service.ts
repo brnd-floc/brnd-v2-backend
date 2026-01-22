@@ -247,11 +247,14 @@ export class DailyService {
     try {
       const stats = await this.indexerSyncService.sync({
         windowHours: 48, // 48-hour window for daily sync
+        syncBrands: true,
         syncPowerLevels: true,
         syncVotes: true,
       });
 
       logger.log('✅ [DAILY] Indexer sync completed', {
+        brandsCreated: stats.brandsCreated,
+        brandsUpdated: stats.brandsUpdated,
         usersUpdated: stats.usersUpdated,
         votesInserted: stats.votesInserted,
         errors: stats.errors.length,
@@ -280,6 +283,7 @@ export class DailyService {
     try {
       const stats = await this.indexerSyncService.sync({
         windowHours,
+        syncBrands: true,
         syncPowerLevels: true,
         syncVotes: true,
       });

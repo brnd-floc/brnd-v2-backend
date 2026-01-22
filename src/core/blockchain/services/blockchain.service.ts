@@ -1158,13 +1158,23 @@ export class BlockchainService {
 
   async fetchMetadataFromIpfs(ipfsHash: string): Promise<any> {
     try {
-      logger.log(`📡 [IPFS] Fetching metadata from hash: ${ipfsHash}`);
+      // Normalize the IPFS hash by stripping common prefixes
+      let normalizedHash = ipfsHash;
+      if (normalizedHash.startsWith('ipfs://')) {
+        normalizedHash = normalizedHash.slice(7); // Remove 'ipfs://'
+      } else if (normalizedHash.startsWith('/ipfs/')) {
+        normalizedHash = normalizedHash.slice(6); // Remove '/ipfs/'
+      }
+
+      logger.log(
+        `📡 [IPFS] Fetching metadata from hash: ${normalizedHash} (original: ${ipfsHash})`,
+      );
 
       // Try multiple IPFS gateways for redundancy
       const gateways = [
-        `https://ipfs.io/ipfs/${ipfsHash}`,
-        `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`,
-        `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+        `https://ipfs.io/ipfs/${normalizedHash}`,
+        `https://cloudflare-ipfs.com/ipfs/${normalizedHash}`,
+        `https://gateway.pinata.cloud/ipfs/${normalizedHash}`,
       ];
 
       for (const gateway of gateways) {

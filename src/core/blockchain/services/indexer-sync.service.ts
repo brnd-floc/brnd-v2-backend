@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Client } from 'pg';
 
-import { User, UserBrandVotes, Brand } from '../../../models';
+import { User, UserBrandVotes, Brand, Category } from '../../../models';
 import { UserService } from '../../user/services/user.service';
+import { BlockchainService } from './blockchain.service';
 
 export interface SyncStats {
   usersChecked: number;
@@ -12,6 +13,9 @@ export interface SyncStats {
   votesChecked: number;
   votesInserted: number;
   votesUpdated: number;
+  brandsChecked: number;
+  brandsCreated: number;
+  brandsUpdated: number;
   errors: string[];
   startTime: Date;
   endTime?: Date;
@@ -24,6 +28,8 @@ export interface SyncOptions {
   syncPowerLevels?: boolean;
   /** Whether to sync votes. Default: true */
   syncVotes?: boolean;
+  /** Whether to sync brands. Default: true */
+  syncBrands?: boolean;
 }
 
 @Injectable()
@@ -38,8 +44,12 @@ export class IndexerSyncService {
     private readonly userBrandVotesRepository: Repository<UserBrandVotes>,
     @InjectRepository(Brand)
     private readonly brandRepository: Repository<Brand>,
+    @InjectRepository(Category)
+    private readonly categoryRepository: Repository<Category>,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
+    @Inject(forwardRef(() => BlockchainService))
+    private readonly blockchainService: BlockchainService,
   ) {}
 
   /**
@@ -89,6 +99,7 @@ export class IndexerSyncService {
       windowHours = 48,
       syncPowerLevels = true,
       syncVotes = true,
+      syncBrands = true,
     } = options;
 
     const stats: SyncStats = {
@@ -97,6 +108,9 @@ export class IndexerSyncService {
       votesChecked: 0,
       votesInserted: 0,
       votesUpdated: 0,
+      brandsChecked: 0,
+      brandsCreated: 0,
+      brandsUpdated: 0,
       errors: [],
       startTime: new Date(),
     };
@@ -108,6 +122,11 @@ export class IndexerSyncService {
 
     try {
       await this.connectToIndexer();
+
+      // Sync brands FIRST so votes have valid brand references
+      if (syncBrands) {
+        await this.syncBrands(stats, windowHours);
+      }
 
       if (syncPowerLevels) {
         await this.syncUserPowerLevels(stats, windowHours);
@@ -198,7 +217,8 @@ export class IndexerSyncService {
           continue;
         }
 
-        if (mysqlUser.brndPowerLevel !== indexerLevel) {
+        // Only update if indexer level is HIGHER (power levels only go up)
+        if (indexerLevel > mysqlUser.brndPowerLevel) {
           this.logger.log(
             `Updating user FID ${fid}: brndPowerLevel ${mysqlUser.brndPowerLevel} -> ${indexerLevel}`,
           );
@@ -410,6 +430,236 @@ export class IndexerSyncService {
   }
 
   /**
+   * Sync brands from indexer to MySQL
+   */
+  private async syncBrands(stats: SyncStats, windowHours: number): Promise<void> {
+    this.logger.log('Syncing brands...');
+    const schema = this.getSchema();
+
+    try {
+      // Build query - for brands we typically want full sync since they're not time-windowed
+      // But we can use block_number for incremental syncs
+      let query: string;
+      const isFullSync = windowHours === 0;
+
+      if (isFullSync) {
+        query = `
+          SELECT id, fid, wallet_address, handle, metadata_hash, total_brnd_awarded,
+                 available_brnd, created_at, block_number, transaction_hash
+          FROM "${schema}".brands
+          ORDER BY id ASC
+        `;
+      } else {
+        // For time-windowed sync, get brands created in the window
+        // Using created_at (unix timestamp) for filtering
+        const windowStart = Math.floor(
+          (Date.now() - windowHours * 60 * 60 * 1000) / 1000,
+        );
+        query = `
+          SELECT id, fid, wallet_address, handle, metadata_hash, total_brnd_awarded,
+                 available_brnd, created_at, block_number, transaction_hash
+          FROM "${schema}".brands
+          WHERE created_at >= ${windowStart}
+          ORDER BY id ASC
+        `;
+      }
+
+      const result = await this.indexerClient!.query(query);
+      const indexerBrands = result.rows;
+
+      this.logger.log(`Found ${indexerBrands.length} brands to check in indexer`);
+      stats.brandsChecked = indexerBrands.length;
+
+      if (indexerBrands.length === 0) {
+        this.logger.log('No brands to sync');
+        return;
+      }
+
+      // Get existing brands from MySQL by onChainId
+      const onChainIds = indexerBrands.map((b: any) => b.id);
+      const existingBrands = await this.brandRepository.find({
+        where: { onChainId: In(onChainIds) },
+        select: ['id', 'onChainId', 'metadataHash'],
+      });
+      const existingBrandMap = new Map(
+        existingBrands.map((b) => [b.onChainId, b]),
+      );
+
+      // Get or create default category
+      let defaultCategory = await this.categoryRepository.findOne({
+        where: { name: 'General' },
+      });
+      if (!defaultCategory) {
+        defaultCategory = await this.categoryRepository.save(
+          this.categoryRepository.create({ name: 'General' }),
+        );
+      }
+
+      // Process each brand
+      for (const indexerBrand of indexerBrands) {
+        try {
+          const onChainId = indexerBrand.id;
+          const existingBrand = existingBrandMap.get(onChainId);
+
+          // Normalize metadataHash (strip ipfs:// prefix if present)
+          let metadataHash = indexerBrand.metadata_hash || '';
+          if (metadataHash.startsWith('ipfs://')) {
+            metadataHash = metadataHash.slice(7);
+          } else if (metadataHash.startsWith('/ipfs/')) {
+            metadataHash = metadataHash.slice(6);
+          }
+
+          if (existingBrand) {
+            // Brand exists - check if metadata hash changed (needs update)
+            if (existingBrand.metadataHash !== metadataHash && metadataHash) {
+              this.logger.log(
+                `Updating brand onChainId ${onChainId}: metadata changed`,
+              );
+
+              // Fetch new metadata from IPFS
+              let metadata: any = {};
+              try {
+                metadata = await this.blockchainService.fetchMetadataFromIpfs(
+                  metadataHash,
+                );
+              } catch (ipfsError) {
+                this.logger.warn(
+                  `Failed to fetch IPFS metadata for brand ${onChainId}: ${ipfsError}`,
+                );
+              }
+
+              // Update the brand
+              await this.brandRepository.update(
+                { onChainId },
+                {
+                  metadataHash,
+                  onChainHandle: indexerBrand.handle,
+                  onChainFid: indexerBrand.fid,
+                  onChainWalletAddress: indexerBrand.wallet_address,
+                  totalBrndAwarded: indexerBrand.total_brnd_awarded?.toString() || '0',
+                  availableBrnd: indexerBrand.available_brnd?.toString() || '0',
+                  ...(metadata.name && { name: metadata.name }),
+                  ...(metadata.description && { description: metadata.description }),
+                  ...(metadata.imageUrl && { imageUrl: metadata.imageUrl }),
+                  ...(metadata.url && { url: metadata.url }),
+                  ...(metadata.profile && { profile: metadata.profile }),
+                  ...(metadata.channel && { channel: metadata.channel }),
+                },
+              );
+              stats.brandsUpdated++;
+            }
+            continue;
+          }
+
+          // Brand doesn't exist - create it
+          this.logger.log(
+            `Creating brand onChainId ${onChainId}: ${indexerBrand.handle}`,
+          );
+
+          // Fetch metadata from IPFS
+          let metadata: any = {};
+          if (metadataHash) {
+            try {
+              metadata = await this.blockchainService.fetchMetadataFromIpfs(
+                metadataHash,
+              );
+              this.logger.log(
+                `Fetched IPFS metadata for brand ${onChainId}:`,
+                metadata,
+              );
+            } catch (ipfsError) {
+              this.logger.warn(
+                `Failed to fetch IPFS metadata for brand ${onChainId}, using handle as name: ${ipfsError}`,
+              );
+            }
+          }
+
+          // Determine profile/channel from metadata or handle
+          let profile = metadata.profile || '';
+          let channel = metadata.channel || '';
+          let queryType = metadata.queryType ?? 0;
+
+          // If no profile/channel in metadata, use handle
+          if (!profile && !channel) {
+            // Default to channel with handle
+            channel = `/${indexerBrand.handle}`;
+            queryType = 0;
+          }
+
+          // Create the brand
+          const newBrand = this.brandRepository.create({
+            // On-chain data
+            onChainId: indexerBrand.id,
+            onChainHandle: indexerBrand.handle,
+            onChainFid: indexerBrand.fid,
+            onChainWalletAddress: indexerBrand.wallet_address,
+            onChainCreatedAt: new Date(Number(indexerBrand.created_at) * 1000),
+            metadataHash,
+
+            // Metadata from IPFS
+            name: metadata.name || indexerBrand.handle,
+            url: metadata.url || '',
+            warpcastUrl: metadata.warpcastUrl || metadata.url || '',
+            description: metadata.description || '',
+            imageUrl: metadata.imageUrl || '',
+            profile,
+            channel,
+            queryType,
+            followerCount: metadata.followerCount || 0,
+            category: defaultCategory,
+
+            // Initialize scoring fields
+            score: 0,
+            stateScore: 0,
+            scoreDay: 0,
+            stateScoreDay: 0,
+            scoreWeek: 0,
+            stateScoreWeek: 0,
+            scoreMonth: 0,
+            stateScoreMonth: 0,
+            ranking: '0',
+            rankingWeek: 0,
+            rankingMonth: 0,
+            bonusPoints: 0,
+            banned: 0,
+            currentRanking: 0,
+
+            // Blockchain amounts
+            totalBrndAwarded: indexerBrand.total_brnd_awarded?.toString() || '0',
+            availableBrnd: indexerBrand.available_brnd?.toString() || '0',
+          });
+
+          await this.brandRepository.save(newBrand);
+          stats.brandsCreated++;
+
+          this.logger.log(
+            `Created brand: ${newBrand.name} (onChainId: ${onChainId})`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          stats.errors.push(
+            `Brand ${indexerBrand.id} (${indexerBrand.handle}): ${errorMessage}`,
+          );
+          this.logger.error(
+            `Error syncing brand ${indexerBrand.id}:`,
+            error,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Brand sync complete: ${stats.brandsCreated} created, ${stats.brandsUpdated} updated`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      stats.errors.push(`Brand sync error: ${errorMessage}`);
+      this.logger.error('Error syncing brands:', error);
+    }
+  }
+
+  /**
    * Create a minimal user record for a new FID
    */
   private async createMinimalUser(
@@ -457,6 +707,9 @@ export class IndexerSyncService {
     this.logger.log('         INDEXER SYNC SUMMARY           ');
     this.logger.log('========================================');
     this.logger.log(`Duration:           ${duration}s`);
+    this.logger.log(`Brands checked:     ${stats.brandsChecked}`);
+    this.logger.log(`Brands created:     ${stats.brandsCreated}`);
+    this.logger.log(`Brands updated:     ${stats.brandsUpdated}`);
     this.logger.log(`Users checked:      ${stats.usersChecked}`);
     this.logger.log(`Users updated:      ${stats.usersUpdated}`);
     this.logger.log(`Votes checked:      ${stats.votesChecked}`);

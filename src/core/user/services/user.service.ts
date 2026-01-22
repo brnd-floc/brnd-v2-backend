@@ -573,26 +573,61 @@ export class UserService {
 
   /**
    * Gets the leaderboard with pagination and current user position.
-   * Uses 15-minute cache for performance.
+   * Uses 15-minute cache for performance (only for 'all' season).
    *
    * @param {number} page - Page number for pagination
    * @param {number} limit - Number of users per page
    * @param {number} currentUserFid - FID of the current user (to show their position)
+   * @param {'all' | 's1' | 's2'} season - Season filter for points
    * @returns {Promise<LeaderboardResponse>} Leaderboard data with pagination
    */
   async getLeaderboard(
     page: number = 1,
     limit: number = 50,
     currentUserFid?: number,
+    season: 'all' | 's1' | 's2' = 'all',
   ): Promise<LeaderboardResponse> {
     console.log(
-      `🏆 [UserService] Getting leaderboard - page: ${page}, limit: ${limit}`,
+      `🏆 [UserService] Getting leaderboard - page: ${page}, limit: ${limit}, season: ${season}`,
     );
 
-    // Check if we need to refresh cache
-    await this.refreshLeaderboardCacheIfNeeded();
+    let allUsers: User[];
+    let total: number;
 
-    const { users: allUsers, total } = this.leaderboardCache!;
+    if (season === 'all') {
+      // Use cache for 'all' season (existing behavior)
+      await this.refreshLeaderboardCacheIfNeeded();
+      allUsers = this.leaderboardCache!.users;
+      total = this.leaderboardCache!.total;
+    } else {
+      // Query directly for season-specific leaderboards
+      const pointsField =
+        season === 's1' ? 'totalS1Points' : 'totalS2Points';
+
+      const users = await this.userRepository.find({
+        select: [
+          'id',
+          'fid',
+          'username',
+          'photoUrl',
+          'points',
+          'totalS1Points',
+          'totalS2Points',
+          'createdAt',
+        ],
+        order: {
+          [pointsField]: 'DESC',
+          createdAt: 'ASC', // Ties broken by earliest registration
+        },
+      });
+
+      // Map users to replace points with season-specific points
+      allUsers = users.map((user) => ({
+        ...user,
+        points: season === 's1' ? user.totalS1Points : user.totalS2Points,
+      }));
+      total = allUsers.length;
+    }
 
     // Calculate pagination
     const skip = (page - 1) * limit;
@@ -619,7 +654,7 @@ export class UserService {
         const user = allUsers[userIndex];
         currentUser = {
           position: userIndex + 1,
-          points: user.points,
+          points: user.points, // Already mapped to season-specific points
           user: {
             id: user.id,
             fid: user.fid,
@@ -631,7 +666,7 @@ export class UserService {
     }
 
     console.log(
-      `🏆 [UserService] Returning ${paginatedUsers.length} users, total: ${total}`,
+      `🏆 [UserService] Returning ${paginatedUsers.length} users, total: ${total}, season: ${season}`,
     );
 
     return {

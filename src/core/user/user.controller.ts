@@ -265,16 +265,21 @@ export class UserController {
     @Session() session: QuickAuthPayload,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 50,
+    @Query('season') season: string = 'all',
     @Res() res: Response,
   ): Promise<Response> {
     try {
       const validatedPage = Math.max(1, Number(page) || 1);
       const validatedLimit = Math.min(100, Math.max(10, Number(limit) || 50));
+      const validatedSeason = ['all', 's1', 's2'].includes(season)
+        ? (season as 'all' | 's1' | 's2')
+        : 'all';
 
       const leaderboard = await this.userService.getLeaderboard(
         validatedPage,
         validatedLimit,
         session.sub,
+        validatedSeason,
       );
 
       return hasResponse(res, leaderboard);

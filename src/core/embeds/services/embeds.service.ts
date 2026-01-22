@@ -40,7 +40,7 @@ export class EmbedsService {
         return this.generateDefaultPodiumEmbed(transactionHash);
       }
 
-      const primaryImageUrl = `https://embeds-sigma.vercel.app/podium/${transactionHash}`;
+      const primaryImageUrl = `https://miniappembeds-production.up.railway.app/podium/${transactionHash}`;
       const imageUrl = await this.ensureImageUrl(primaryImageUrl);
 
       const embedData: EmbedData = {
@@ -133,7 +133,7 @@ export class EmbedsService {
       const embedData: EmbedData = {
         title: `${brand.name} on BRND`,
         description: `The page for ${brand.name} on BRND`,
-        imageUrl: `https://embeds-sigma.vercel.app/brand/${brandId}`,
+        imageUrl: `https://miniappembeds-production.up.railway.app/brand/${brandId}`,
         targetUrl: `https://brnd.land/brand/${brandId}`,
       };
 

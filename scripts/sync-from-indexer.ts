@@ -7,6 +7,7 @@
  * to the MySQL production database.
  *
  * Syncs:
+ * - Brands (new and updated)
  * - User brndPowerLevel
  * - Votes (missing ones)
  *
@@ -28,6 +29,9 @@ import * as readline from 'readline';
 // ============================================================================
 
 interface SyncStats {
+  brandsChecked: number;
+  brandsCreated: number;
+  brandsUpdated: number;
   usersChecked: number;
   usersUpdated: number;
   votesChecked: number;
@@ -39,8 +43,10 @@ interface SyncStats {
 
 interface SyncOptions {
   windowHours: number;
+  syncBrands: boolean;
   syncPowerLevels: boolean;
   syncVotes: boolean;
+  dryRun: boolean;
 }
 
 // ============================================================================
@@ -102,34 +108,57 @@ async function promptForOptions(): Promise<SyncOptions> {
 
   // What to sync
   console.log('\nWhat do you want to sync?');
-  console.log('  1. Both power levels and votes (recommended)');
-  console.log('  2. Only power levels');
-  console.log('  3. Only votes');
+  console.log('  1. All (brands, power levels, votes) (recommended)');
+  console.log('  2. Only brands');
+  console.log('  3. Only power levels');
+  console.log('  4. Only votes');
+  console.log('  5. Brands and votes (skip power levels)');
   console.log('');
 
-  const syncChoice = await prompt('Enter choice (1-3): ');
+  const syncChoice = await prompt('Enter choice (1-5): ');
 
+  let syncBrands = true;
   let syncPowerLevels = true;
   let syncVotes = true;
 
   switch (syncChoice.trim()) {
     case '2':
+      syncPowerLevels = false;
       syncVotes = false;
       break;
     case '3':
+      syncBrands = false;
+      syncVotes = false;
+      break;
+    case '4':
+      syncBrands = false;
+      syncPowerLevels = false;
+      break;
+    case '5':
       syncPowerLevels = false;
       break;
     default:
-      // Default to both
+      // Default to all
       break;
   }
+
+  // Dry run option
+  console.log('\nRun mode:');
+  console.log('  1. Live (actually sync data)');
+  console.log('  2. Dry run (preview only, no changes)');
+  console.log('');
+
+  const modeChoice = await prompt('Enter choice (1-2): ');
+  const dryRun = modeChoice.trim() === '2';
 
   // Confirm
   console.log('\n' + '='.repeat(50));
   console.log('SYNC CONFIGURATION:');
   console.log(`  Window: ${windowHours === 0 ? 'FULL SYNC' : `Last ${windowHours} hours`}`);
+  console.log(`  Sync brands: ${syncBrands ? 'Yes' : 'No'}`);
   console.log(`  Sync power levels: ${syncPowerLevels ? 'Yes' : 'No'}`);
   console.log(`  Sync votes: ${syncVotes ? 'Yes' : 'No'}`);
+  console.log(`  Mode: ${dryRun ? '🔍 DRY RUN (no changes)' : '🚀 LIVE'}`);
   console.log('='.repeat(50));
 
   const confirm = await prompt('\nProceed with sync? (y/n): ');
@@ -138,7 +167,7 @@ async function promptForOptions(): Promise<SyncOptions> {
     process.exit(0);
   }
 
-  return { windowHours, syncPowerLevels, syncVotes };
+  return { windowHours, syncBrands, syncPowerLevels, syncVotes, dryRun };
 }
 
 // ============================================================================
@@ -160,6 +189,9 @@ class IndexerSyncer {
     this.pgClient = new Client({ connectionString });
     this.schema = process.env.INDEXER_DB_SCHEMA || 'public';
     this.stats = {
+      brandsChecked: 0,
+      brandsCreated: 0,
+      brandsUpdated: 0,
       usersChecked: 0,
       usersUpdated: 0,
       votesChecked: 0,
@@ -207,13 +239,22 @@ class IndexerSyncer {
   async sync(options: SyncOptions): Promise<SyncStats> {
     this.stats.startTime = new Date();
 
+    if (options.dryRun) {
+      console.log('\n🔍 DRY RUN MODE - No changes will be made\n');
+    }
+
     try {
+      // Sync brands FIRST so votes have valid brand references
+      if (options.syncBrands) {
+        await this.syncBrands(options.windowHours, options.dryRun);
+      }
+
       if (options.syncPowerLevels) {
-        await this.syncPowerLevels(options.windowHours);
+        await this.syncPowerLevels(options.windowHours, options.dryRun);
       }
 
       if (options.syncVotes) {
-        await this.syncVotes(options.windowHours);
+        await this.syncVotes(options.windowHours, options.dryRun);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -225,8 +266,8 @@ class IndexerSyncer {
     return this.stats;
   }
 
-  private async syncPowerLevels(windowHours: number): Promise<void> {
-    console.log('\n📊 Syncing user power levels...');
+  private async syncPowerLevels(windowHours: number, dryRun: boolean = false): Promise<void> {
+    console.log(`\n📊 Syncing user power levels...${dryRun ? ' [DRY RUN]' : ''}`);
 
     const isFullSync = windowHours === 0;
     let query: string;
@@ -281,24 +322,27 @@ class IndexerSyncer {
         continue;
       }
 
-      if (mysqlUser.brndPowerLevel !== indexerLevel) {
+      // Only update if indexer level is HIGHER (power levels only go up)
+      if (indexerLevel > mysqlUser.brndPowerLevel) {
         console.log(
-          `   Updating FID ${fid}: level ${mysqlUser.brndPowerLevel} -> ${indexerLevel}`,
+          `   ${dryRun ? '[DRY RUN] Would update' : 'Updating'} FID ${fid}: level ${mysqlUser.brndPowerLevel} -> ${indexerLevel}`,
         );
 
-        await this.mysqlConn!.execute(
-          'UPDATE users SET brndPowerLevel = ? WHERE fid = ?',
-          [indexerLevel, fid],
-        );
+        if (!dryRun) {
+          await this.mysqlConn!.execute(
+            'UPDATE users SET brndPowerLevel = ? WHERE fid = ?',
+            [indexerLevel, fid],
+          );
+        }
         this.stats.usersUpdated++;
       }
     }
 
-    console.log(`   ✅ Updated ${this.stats.usersUpdated} users`);
+    console.log(`   ✅ ${dryRun ? 'Would update' : 'Updated'} ${this.stats.usersUpdated} users`);
   }
 
-  private async syncVotes(windowHours: number): Promise<void> {
-    console.log('\n📊 Syncing votes...');
+  private async syncVotes(windowHours: number, dryRun: boolean = false): Promise<void> {
+    console.log(`\n📊 Syncing votes...${dryRun ? ' [DRY RUN]' : ''}`);
 
     const isFullSync = windowHours === 0;
     let query: string;
@@ -391,16 +435,22 @@ class IndexerSyncer {
           // Get user ID
           let userId = userFidToId.get(vote.fid);
           if (!userId) {
-            // Create minimal user
-            const [insertResult] = await this.mysqlConn!.execute(
-              `INSERT INTO users (fid, username, photoUrl, address, points, dailyStreak, maxDailyStreak,
-               totalPodiums, votedBrandsCount, brndPowerLevel, totalVotes, banned, powerups, verified,
-               notificationsEnabled, neynarScore, createdAt, updatedAt)
-               VALUES (?, ?, '', ?, 0, 0, 0, 0, 0, 0, 0, false, 0, false, false, 0, NOW(), NOW())`,
-              [vote.fid, `user_${vote.fid}`, vote.voter],
-            );
-            userId = (insertResult as any).insertId;
-            userFidToId.set(vote.fid, userId);
+            if (dryRun) {
+              // In dry run, use a placeholder
+              userId = -1;
+              console.log(`   [DRY RUN] Would create user for FID ${vote.fid}`);
+            } else {
+              // Create minimal user
+              const [insertResult] = await this.mysqlConn!.execute(
+                `INSERT INTO users (fid, username, photoUrl, address, points, dailyStreak, maxDailyStreak,
+                 totalPodiums, votedBrandsCount, brndPowerLevel, totalVotes, banned, powerups, verified,
+                 notificationsEnabled, neynarScore, createdAt, updatedAt)
+                 VALUES (?, ?, '', ?, 0, 0, 0, 0, 0, 0, 0, false, 0, false, false, 0, NOW(), NOW())`,
+                [vote.fid, `user_${vote.fid}`, vote.voter],
+              );
+              userId = (insertResult as any).insertId;
+              userFidToId.set(vote.fid, userId);
+            }
           }
 
           // Calculate vote data
@@ -411,24 +461,26 @@ class IndexerSyncer {
           const rewardAmount = (costBigInt * 10n).toString();
 
           // Insert vote
-          await this.mysqlConn!.execute(
-            `INSERT INTO user_brand_votes
-             (transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, day,
-              brndPaidWhenCreatingPodium, rewardAmount, shared, shareVerified, pointsEarned)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, false, 3)`,
-            [
-              txHash,
-              vote.id,
-              userId,
-              brandIdsArray[0],
-              brandIdsArray[1],
-              brandIdsArray[2],
-              voteDate,
-              day,
-              brndPaid,
-              rewardAmount,
-            ],
-          );
+          if (!dryRun) {
+            await this.mysqlConn!.execute(
+              `INSERT INTO user_brand_votes
+               (transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, day,
+                brndPaidWhenCreatingPodium, rewardAmount, shared, shareVerified, pointsEarned)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, false, 3)`,
+              [
+                txHash,
+                vote.id,
+                userId,
+                brandIdsArray[0],
+                brandIdsArray[1],
+                brandIdsArray[2],
+                voteDate,
+                day,
+                brndPaid,
+                rewardAmount,
+              ],
+            );
+          }
 
           this.stats.votesInserted++;
           existingTxSet.add(txHash);
@@ -445,7 +497,231 @@ class IndexerSyncer {
       );
     }
 
-    console.log(`\n   ✅ Inserted ${this.stats.votesInserted} votes`);
+    console.log(`\n   ✅ ${dryRun ? 'Would insert' : 'Inserted'} ${this.stats.votesInserted} votes`);
+  }
+
+  private async syncBrands(windowHours: number, dryRun: boolean = false): Promise<void> {
+    console.log(`\n📊 Syncing brands...${dryRun ? ' [DRY RUN]' : ''}`);
+
+    const isFullSync = windowHours === 0;
+    let query: string;
+
+    if (isFullSync) {
+      query = `
+        SELECT id, fid, wallet_address, handle, metadata_hash, total_brnd_awarded,
+               available_brnd, created_at, block_number, transaction_hash
+        FROM "${this.schema}".brands
+        ORDER BY id ASC
+      `;
+    } else {
+      const windowStart = Math.floor(
+        (Date.now() - windowHours * 60 * 60 * 1000) / 1000,
+      );
+      query = `
+        SELECT id, fid, wallet_address, handle, metadata_hash, total_brnd_awarded,
+               available_brnd, created_at, block_number, transaction_hash
+        FROM "${this.schema}".brands
+        WHERE created_at >= ${windowStart}
+        ORDER BY id ASC
+      `;
+    }
+
+    const result = await this.pgClient.query(query);
+    const indexerBrands = result.rows;
+
+    console.log(`   Found ${indexerBrands.length} brands to check`);
+    this.stats.brandsChecked = indexerBrands.length;
+
+    if (indexerBrands.length === 0) {
+      console.log('   No brands to sync');
+      return;
+    }
+
+    // Get existing brands from MySQL by onChainId
+    const onChainIds = indexerBrands.map((b: any) => b.id);
+    const [existingRows] = await this.mysqlConn!.execute(
+      `SELECT id, onChainId, metadataHash FROM brands WHERE onChainId IN (${onChainIds.join(',')})`,
+    );
+    const existingBrandMap = new Map(
+      (existingRows as any[]).map((b) => [b.onChainId, b]),
+    );
+
+    console.log(`   ${existingBrandMap.size} brands already exist in MySQL`);
+
+    // Get or create default category
+    let [categoryRows] = await this.mysqlConn!.execute(
+      `SELECT id FROM category WHERE name = 'General' LIMIT 1`,
+    );
+    let defaultCategoryId: number;
+    if ((categoryRows as any[]).length === 0) {
+      const [insertResult] = await this.mysqlConn!.execute(
+        `INSERT INTO category (name) VALUES ('General')`,
+      );
+      defaultCategoryId = (insertResult as any).insertId;
+    } else {
+      defaultCategoryId = (categoryRows as any[])[0].id;
+    }
+
+    // Process each brand
+    for (const indexerBrand of indexerBrands) {
+      try {
+        const onChainId = indexerBrand.id;
+        const existingBrand = existingBrandMap.get(onChainId);
+
+        // Normalize metadataHash (strip ipfs:// prefix if present)
+        let metadataHash = indexerBrand.metadata_hash || '';
+        if (metadataHash.startsWith('ipfs://')) {
+          metadataHash = metadataHash.slice(7);
+        } else if (metadataHash.startsWith('/ipfs/')) {
+          metadataHash = metadataHash.slice(6);
+        }
+
+        if (existingBrand) {
+          // Brand exists - check if metadata hash changed
+          if (existingBrand.metadataHash !== metadataHash && metadataHash) {
+            console.log(`   ${dryRun ? '[DRY RUN] Would update' : 'Updating'} brand onChainId ${onChainId}: metadata changed`);
+
+            // Fetch metadata from IPFS
+            const metadata = await this.fetchIpfsMetadata(metadataHash);
+
+            // Update the brand
+            if (!dryRun) {
+              await this.mysqlConn!.execute(
+                `UPDATE brands SET
+                  metadataHash = ?,
+                  onChainHandle = ?,
+                  onChainFid = ?,
+                  onChainWalletAddress = ?,
+                  totalBrndAwarded = ?,
+                  availableBrnd = ?,
+                  name = COALESCE(?, name),
+                  description = COALESCE(?, description),
+                  imageUrl = COALESCE(?, imageUrl),
+                  url = COALESCE(?, url),
+                  profile = COALESCE(?, profile),
+                  channel = COALESCE(?, channel),
+                  updatedAt = NOW()
+                WHERE onChainId = ?`,
+                [
+                  metadataHash,
+                  indexerBrand.handle,
+                  indexerBrand.fid,
+                  indexerBrand.wallet_address,
+                  indexerBrand.total_brnd_awarded?.toString() || '0',
+                  indexerBrand.available_brnd?.toString() || '0',
+                  metadata.name || null,
+                  metadata.description || null,
+                  metadata.imageUrl || null,
+                  metadata.url || null,
+                  metadata.profile || null,
+                  metadata.channel || null,
+                  onChainId,
+                ],
+              );
+            }
+            this.stats.brandsUpdated++;
+          }
+          continue;
+        }
+
+        // Brand doesn't exist - create it
+        console.log(`   ${dryRun ? '[DRY RUN] Would create' : 'Creating'} brand onChainId ${onChainId}: ${indexerBrand.handle}`);
+
+        // Fetch metadata from IPFS
+        const metadata = await this.fetchIpfsMetadata(metadataHash);
+
+        // Determine profile/channel
+        let profile = metadata.profile || '';
+        let channel = metadata.channel || '';
+        let queryType = metadata.queryType ?? 0;
+
+        if (!profile && !channel) {
+          channel = `/${indexerBrand.handle}`;
+          queryType = 0;
+        }
+
+        // Insert the brand
+        if (!dryRun) {
+          await this.mysqlConn!.execute(
+            `INSERT INTO brands (
+              onChainId, onChainHandle, onChainFid, onChainWalletAddress, onChainCreatedAt,
+              metadataHash, name, url, warpcastUrl, description, imageUrl, profile, channel,
+              queryType, followerCount, categoryId, score, stateScore, scoreDay, stateScoreDay,
+              scoreWeek, stateScoreWeek, scoreMonth, stateScoreMonth, ranking, rankingWeek,
+              rankingMonth, bonusPoints, banned, currentRanking, totalBrndAwarded, availableBrnd,
+              createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [
+              indexerBrand.id,
+              indexerBrand.handle,
+              indexerBrand.fid,
+              indexerBrand.wallet_address,
+              new Date(Number(indexerBrand.created_at) * 1000),
+              metadataHash,
+              metadata.name || indexerBrand.handle,
+              metadata.url || '',
+              metadata.warpcastUrl || metadata.url || '',
+              metadata.description || '',
+              metadata.imageUrl || '',
+              profile,
+              channel,
+              queryType,
+              metadata.followerCount || 0,
+              defaultCategoryId,
+              0, // score
+              0, // stateScore
+              0, // scoreDay
+              0, // stateScoreDay
+              0, // scoreWeek
+              0, // stateScoreWeek
+              0, // scoreMonth
+              0, // stateScoreMonth
+              '0', // ranking
+              0, // rankingWeek
+              0, // rankingMonth
+              0, // bonusPoints
+              0, // banned
+              0, // currentRanking
+              indexerBrand.total_brnd_awarded?.toString() || '0',
+              indexerBrand.available_brnd?.toString() || '0',
+            ],
+          );
+          console.log(`   ✅ Created brand: ${metadata.name || indexerBrand.handle} (onChainId: ${onChainId})`);
+        }
+
+        this.stats.brandsCreated++;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.stats.errors.push(`Brand ${indexerBrand.id} (${indexerBrand.handle}): ${msg}`);
+        console.error(`   ❌ Error syncing brand ${indexerBrand.id}: ${msg}`);
+      }
+    }
+
+    console.log(`   ✅ Brands sync complete: ${this.stats.brandsCreated} ${dryRun ? 'would be' : ''} created, ${this.stats.brandsUpdated} ${dryRun ? 'would be' : ''} updated`);
+  }
+
+  private async fetchIpfsMetadata(metadataHash: string): Promise<any> {
+    if (!metadataHash) return {};
+
+    const gateways = [
+      `https://ipfs.io/ipfs/${metadataHash}`,
+      `https://cloudflare-ipfs.com/ipfs/${metadataHash}`,
+      `https://gateway.pinata.cloud/ipfs/${metadataHash}`,
+    ];
+
+    for (const gateway of gateways) {
+      try {
+        const response = await fetch(gateway);
+        if (response.ok) {
+          return await response.json();
+        }
+      } catch {
+        // Try next gateway
+      }
+    }
+
+    console.log(`   ⚠️ Failed to fetch IPFS metadata: ${metadataHash}`);
+    return {};
   }
 
   printSummary(): void {
@@ -460,6 +736,9 @@ class IndexerSyncer {
     console.log('         SYNC SUMMARY');
     console.log('='.repeat(50));
     console.log(`Duration:           ${duration}s`);
+    console.log(`Brands checked:     ${this.stats.brandsChecked}`);
+    console.log(`Brands created:     ${this.stats.brandsCreated}`);
+    console.log(`Brands updated:     ${this.stats.brandsUpdated}`);
     console.log(`Users checked:      ${this.stats.usersChecked}`);
     console.log(`Users updated:      ${this.stats.usersUpdated}`);
     console.log(`Votes checked:      ${this.stats.votesChecked}`);
@@ -494,15 +773,17 @@ async function main() {
 
     let options: SyncOptions;
 
+    const dryRun = args.includes('--dry-run');
+
     if (args.includes('--48h')) {
-      options = { windowHours: 48, syncPowerLevels: true, syncVotes: true };
-      console.log('\n🔄 Running 48-hour sync (non-interactive mode)');
+      options = { windowHours: 48, syncBrands: true, syncPowerLevels: true, syncVotes: true, dryRun };
+      console.log(`\n🔄 Running 48-hour sync (non-interactive mode)${dryRun ? ' [DRY RUN]' : ''}`);
     } else if (args.includes('--full')) {
-      options = { windowHours: 0, syncPowerLevels: true, syncVotes: true };
-      console.log('\n🔄 Running FULL sync (non-interactive mode)');
+      options = { windowHours: 0, syncBrands: true, syncPowerLevels: true, syncVotes: true, dryRun };
+      console.log(`\n🔄 Running FULL sync (non-interactive mode)${dryRun ? ' [DRY RUN]' : ''}`);
     } else if (args.includes('--7d')) {
-      options = { windowHours: 168, syncPowerLevels: true, syncVotes: true };
-      console.log('\n🔄 Running 7-day sync (non-interactive mode)');
+      options = { windowHours: 168, syncBrands: true, syncPowerLevels: true, syncVotes: true, dryRun };
+      console.log(`\n🔄 Running 7-day sync (non-interactive mode)${dryRun ? ' [DRY RUN]' : ''}`);
     } else {
       // Interactive mode
       options = await promptForOptions();

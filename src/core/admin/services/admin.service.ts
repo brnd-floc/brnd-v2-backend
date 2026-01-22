@@ -788,11 +788,20 @@ export class AdminService {
       }
 
       // Use metadataHash from DTO if provided, otherwise from contract
-      const metadataHash =
+      let metadataHash =
         blockchainBrandDto.metadataHash || contractBrand.metadataHash;
 
+      // Normalize the IPFS hash by stripping common prefixes for clean storage
+      if (metadataHash) {
+        if (metadataHash.startsWith('ipfs://')) {
+          metadataHash = metadataHash.slice(7); // Remove 'ipfs://'
+        } else if (metadataHash.startsWith('/ipfs/')) {
+          metadataHash = metadataHash.slice(6); // Remove '/ipfs/'
+        }
+      }
+
       console.log(
-        `📡 [IPFS] Using metadataHash: ${metadataHash} (from ${blockchainBrandDto.metadataHash ? 'indexer' : 'contract'})`,
+        `📡 [IPFS] Using metadataHash: ${metadataHash} (from ${blockchainBrandDto.metadataHash ? 'indexer' : 'contract'}, normalized)`,
       );
 
       // Fetch metadata from IPFS

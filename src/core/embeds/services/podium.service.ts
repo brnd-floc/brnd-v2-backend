@@ -194,7 +194,7 @@ export class PodiumService implements OnModuleInit {
   //     await this.userBrandVotesRepository.update(
   //       { transactionHash },
   //       {
-  //         podiumImageUrl: `https://embeds-sigma.vercel.app/podium/${transactionHash}`,
+  //         podiumImageUrl: `https://miniappembeds-production.up.railway.app/podium/${transactionHash}`,
   //       },
   //     );
 
