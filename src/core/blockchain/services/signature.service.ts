@@ -12,7 +12,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 
 import { User, UserBrandVotes } from '../../../models';
-import { getConfig } from '../../../security/config';
+import config, { getConfig } from '../../../security/config';
 import { logger } from '../../../main';
 import { PodiumService } from './podium.service';
 
@@ -181,10 +181,12 @@ export class SignatureService {
 
     logger.log(`📈 [SIGNATURE] Current nonce from contract: ${nonce}`);
 
+    const config = getConfig();
+
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const domain = {
@@ -291,10 +293,12 @@ export class SignatureService {
       args: [recipient as `0x${string}`],
     } as any);
 
+    const config = getConfig();
+
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const domain = {
@@ -432,7 +436,7 @@ export class SignatureService {
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const domain = {
@@ -509,43 +513,45 @@ export class SignatureService {
     fid: number,
     walletAddress: string,
     brandIds: [number, number, number],
-    metadataURI: string,  // ← NEW PARAM
+    metadataURI: string, // ← NEW PARAM
     deadline: number,
   ): Promise<string> {
     logger.log(
       `🏆 [PODIUM SIGNATURE] Generating claim signature for FID: ${fid}, Brands: [${brandIds.join(', ')}]`,
     );
-  
+
     if (!process.env.PRIVATE_KEY) {
       throw new Error('PRIVATE_KEY environment variable is not set');
     }
-  
+
     const nonce = await this.podiumService.getFidNonce(fid);
     logger.log(`🏆 [PODIUM SIGNATURE] Current nonce: ${nonce}`);
-  
+
     const privateKey = process.env.PRIVATE_KEY.startsWith('0x')
       ? (process.env.PRIVATE_KEY as `0x${string}`)
       : (`0x${process.env.PRIVATE_KEY}` as `0x${string}`);
-  
+
     const account = privateKeyToAccount(privateKey);
     console.log('🔑 [PODIUM SIGNATURE] Signer address:', account.address);
-  
+
+    const config = getConfig();
+
     const walletClient = createWalletClient({
       account,
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
-  
+
     const PODIUM_CONTRACT_ADDRESS =
-      '0x78E84851343DD61594a6588A38d1B154435B5dB2' as `0x${string}`;  // ← UPDATED
-  
+      '0x78E84851343DD61594a6588A38d1B154435B5dB2' as `0x${string}`; // ← UPDATED
+
     const domain = {
       name: 'BRNDPodiumCollectables',
       version: '1',
       chainId: 8453,
       verifyingContract: PODIUM_CONTRACT_ADDRESS,
     } as const;
-  
+
     // UPDATED - includes metadataURI
     const types = {
       ClaimPodium: [
@@ -554,14 +560,14 @@ export class SignatureService {
         { name: 'brand3', type: 'uint16' },
         { name: 'fid', type: 'uint256' },
         { name: 'price', type: 'uint256' },
-        { name: 'metadataURI', type: 'string' },  // ← NEW
+        { name: 'metadataURI', type: 'string' }, // ← NEW
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
       ],
     } as const;
-  
+
     const BASE_PRICE = BigInt('1000000000000000000000000');
-  
+
     const signature = await walletClient.signTypedData({
       account,
       domain,
@@ -573,12 +579,12 @@ export class SignatureService {
         brand3: brandIds[2],
         fid: BigInt(fid),
         price: BASE_PRICE,
-        metadataURI: metadataURI,  // ← NEW
+        metadataURI: metadataURI, // ← NEW
         nonce: nonce,
         deadline: BigInt(deadline),
       },
     });
-  
+
     logger.log(`✅ [PODIUM SIGNATURE] Claim signature generated: ${signature}`);
     return signature;
   }
