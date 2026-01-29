@@ -10,6 +10,7 @@
  * - Brands (new and updated)
  * - User brndPowerLevel
  * - Votes (missing ones)
+ * - Repeat fee distributions (when votes match podium collectibles)
  *
  * Usage:
  *   bun run scripts/sync-from-indexer.ts
@@ -18,11 +19,24 @@
  *   - INDEXER_DB_URL: PostgreSQL connection string
  *   - INDEXER_DB_SCHEMA: Schema name (default: public)
  *   - DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME: MySQL connection
+ *   - BASE_RPC_URL: Base chain RPC URL
+ *   - PRIVATE_KEY: Backend wallet private key (for sending BRND fees)
  */
 
 import { Client } from 'pg';
 import * as mysql from 'mysql2/promise';
 import * as readline from 'readline';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  keccak256,
+  encodeAbiParameters,
+  parseUnits,
+  formatUnits,
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
 
 // ============================================================================
 // Types
@@ -36,6 +50,9 @@ interface SyncStats {
   usersUpdated: number;
   votesChecked: number;
   votesInserted: number;
+  feesProcessed: number;
+  feesSucceeded: number;
+  feesFailed: number;
   errors: string[];
   startTime: Date;
   endTime?: Date;
@@ -47,6 +64,440 @@ interface SyncOptions {
   syncPowerLevels: boolean;
   syncVotes: boolean;
   dryRun: boolean;
+}
+
+// ============================================================================
+// Repeat Fee Processor
+// ============================================================================
+
+// Podium Collectibles Contract ABI (only the functions we need)
+const PODIUM_COLLECTIBLES_ABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
+    name: 'arrangementToTokenId',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'podiumData',
+    outputs: [
+      { internalType: 'uint256', name: 'genesisCreatorFid', type: 'uint256' },
+      { internalType: 'uint256', name: 'ownerFid', type: 'uint256' },
+      { internalType: 'uint256', name: 'claimCount', type: 'uint256' },
+      { internalType: 'uint256', name: 'lastSalePrice', type: 'uint256' },
+      { internalType: 'uint256', name: 'totalFeesEarned', type: 'uint256' },
+      { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'fidWallet',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+// ERC20 ABI (only the functions we need)
+const ERC20_ABI = [
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'transfer',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+
+class RepeatFeeProcessor {
+  private readonly PODIUM_CONTRACT_ADDRESS = '0x78E84851343DD61594a6588A38d1B154435B5dB2' as `0x${string}`;
+  private readonly BRND_TOKEN_ADDRESS = '0x41Ed0311640A5e489A90940b1c33433501a21B07' as `0x${string}`;
+  private readonly FEE_PERCENTAGE = 10; // 10%
+  private readonly MAX_FEE_BRND = 80; // Max 80 BRND
+  private readonly TREASURY_ALERT_THRESHOLD = 5_000_000; // 5M BRND
+  private readonly ADMIN_FIDS = [16098, 8109, 5431];
+  private readonly NOTIFICATION_URL = 'https://api.farcaster.xyz/v1/frame-notifications';
+
+  private publicClient: any;
+  private walletClient: any;
+  private account: any;
+  private mysqlConn: mysql.Connection;
+
+  constructor(mysqlConn: mysql.Connection) {
+    this.mysqlConn = mysqlConn;
+
+    const rpcUrl = process.env.BASE_RPC_URL;
+    if (!rpcUrl) {
+      throw new Error('BASE_RPC_URL environment variable is required');
+    }
+
+    this.publicClient = createPublicClient({
+      chain: base,
+      transport: http(rpcUrl),
+    });
+
+    const privateKey = process.env.PRIVATE_KEY;
+    if (privateKey) {
+      const formattedKey = privateKey.startsWith('0x')
+        ? (privateKey as `0x${string}`)
+        : (`0x${privateKey}` as `0x${string}`);
+      this.account = privateKeyToAccount(formattedKey);
+      this.walletClient = createWalletClient({
+        account: this.account,
+        chain: base,
+        transport: http(rpcUrl),
+      });
+    }
+  }
+
+  private calculateArrangementHash(brandIds: [number, number, number]): `0x${string}` {
+    const encoded = encodeAbiParameters(
+      [
+        { name: 'brand1', type: 'uint16' },
+        { name: 'brand2', type: 'uint16' },
+        { name: 'brand3', type: 'uint16' },
+      ],
+      [brandIds[0], brandIds[1], brandIds[2]],
+    );
+    return keccak256(encoded);
+  }
+
+  async getArrangementTokenId(brandIds: [number, number, number]): Promise<bigint> {
+    try {
+      const arrangementHash = this.calculateArrangementHash(brandIds);
+      const tokenId = await this.publicClient.readContract({
+        address: this.PODIUM_CONTRACT_ADDRESS,
+        abi: PODIUM_COLLECTIBLES_ABI,
+        functionName: 'arrangementToTokenId',
+        args: [arrangementHash],
+      });
+      return tokenId as bigint;
+    } catch (error) {
+      return BigInt(0);
+    }
+  }
+
+  async getPodiumData(tokenId: bigint): Promise<{ ownerFid: bigint } | null> {
+    try {
+      const data = await this.publicClient.readContract({
+        address: this.PODIUM_CONTRACT_ADDRESS,
+        abi: PODIUM_COLLECTIBLES_ABI,
+        functionName: 'podiumData',
+        args: [tokenId],
+      });
+      const result = data as readonly [bigint, bigint, bigint, bigint, bigint, bigint];
+      return { ownerFid: result[1] };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async getFidWallet(fid: bigint): Promise<`0x${string}` | null> {
+    try {
+      const wallet = await this.publicClient.readContract({
+        address: this.PODIUM_CONTRACT_ADDRESS,
+        abi: PODIUM_COLLECTIBLES_ABI,
+        functionName: 'fidWallet',
+        args: [fid],
+      });
+      const walletAddress = wallet as `0x${string}`;
+      if (walletAddress === '0x0000000000000000000000000000000000000000' || !walletAddress) {
+        return null;
+      }
+      return walletAddress;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  calculateFee(voteCostBrnd: number): number {
+    const fee = voteCostBrnd * (this.FEE_PERCENTAGE / 100);
+    return Math.min(fee, this.MAX_FEE_BRND);
+  }
+
+  async getTreasuryBalance(): Promise<number> {
+    if (!this.account) return 0;
+    try {
+      const balance = await this.publicClient.readContract({
+        address: this.BRND_TOKEN_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [this.account.address],
+      });
+      return Number(formatUnits(balance as bigint, 18));
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  async sendBrndFromTreasury(
+    toAddress: `0x${string}`,
+    amountBrnd: number,
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    if (!this.walletClient || !this.account) {
+      return { success: false, error: 'Wallet not configured' };
+    }
+
+    try {
+      const amountWei = parseUnits(amountBrnd.toString(), 18);
+
+      const txHash = await this.walletClient.writeContract({
+        address: this.BRND_TOKEN_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [toAddress, amountWei],
+      });
+
+      // Wait for confirmation
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        confirmations: 1,
+      });
+
+      if (receipt.status === 'success') {
+        return { success: true, txHash };
+      } else {
+        return { success: false, txHash, error: 'Transaction reverted' };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  async feeDistributionExists(voteTransactionHash: string): Promise<boolean> {
+    const [rows] = await this.mysqlConn.execute(
+      'SELECT id FROM repeat_fee_distributions WHERE voteTransactionHash = ?',
+      [voteTransactionHash],
+    );
+    return (rows as any[]).length > 0;
+  }
+
+  async getBrandNames(brandIds: [number, number, number]): Promise<[string, string, string]> {
+    const [rows] = await this.mysqlConn.execute(
+      'SELECT id, name FROM brands WHERE id IN (?, ?, ?)',
+      brandIds,
+    );
+    const brandMap = new Map((rows as any[]).map((b) => [b.id, b.name]));
+    return [
+      brandMap.get(brandIds[0]) || `Brand #${brandIds[0]}`,
+      brandMap.get(brandIds[1]) || `Brand #${brandIds[1]}`,
+      brandMap.get(brandIds[2]) || `Brand #${brandIds[2]}`,
+    ];
+  }
+
+  async getVoterUsername(voterFid: number): Promise<string> {
+    const [rows] = await this.mysqlConn.execute(
+      'SELECT username FROM users WHERE fid = ?',
+      [voterFid],
+    );
+    const users = rows as any[];
+    if (users.length > 0 && users[0].username) {
+      return users[0].username;
+    }
+    return `FID ${voterFid}`;
+  }
+
+  async getOwnerNotificationToken(ownerFid: number): Promise<string | null> {
+    const [rows] = await this.mysqlConn.execute(
+      'SELECT notificationToken FROM users WHERE fid = ? AND notificationsEnabled = true AND notificationToken IS NOT NULL',
+      [ownerFid],
+    );
+    const users = rows as any[];
+    return users.length > 0 ? users[0].notificationToken : null;
+  }
+
+  async sendNotification(
+    ownerFid: number,
+    title: string,
+    body: string,
+    notificationId: string,
+  ): Promise<boolean> {
+    try {
+      const notificationToken = await this.getOwnerNotificationToken(ownerFid);
+      if (!notificationToken) {
+        return false;
+      }
+
+      const response = await fetch(this.NOTIFICATION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notificationId,
+          title,
+          body,
+          targetUrl: 'https://brnd.land',
+          tokens: [notificationToken],
+        }),
+      });
+
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async sendTreasuryLowAlert(currentBalance: number): Promise<void> {
+    const formattedBalance = currentBalance.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const notificationId = `treasury-low-${Date.now()}`;
+
+    for (const adminFid of this.ADMIN_FIDS) {
+      await this.sendNotification(
+        adminFid,
+        'TREASURY RUNNING LOW',
+        `Balance: ${formattedBalance} BRND`,
+        notificationId,
+      );
+    }
+    console.log(`      ⚠️ Treasury low alert sent to ${this.ADMIN_FIDS.length} admins! Balance: ${formattedBalance} BRND`);
+  }
+
+  async processVoteFee(params: {
+    voteTransactionHash: string;
+    brandIds: [number, number, number];
+    voterFid: number;
+    voterWallet?: string;
+    voteCostWei: string;
+    dryRun: boolean;
+  }): Promise<{ processed: boolean; reason?: string }> {
+    const { voteTransactionHash, brandIds, voterFid, voterWallet, voteCostWei, dryRun } = params;
+
+    // 1. Check if arrangement exists as a Podium Collectible (do this first to avoid unnecessary DB checks)
+    const tokenId = await this.getArrangementTokenId(brandIds);
+    if (tokenId === BigInt(0)) {
+      return { processed: false, reason: 'Not a collectible' };
+    }
+
+    // 2. Get podium data (owner FID)
+    const podiumData = await this.getPodiumData(tokenId);
+    if (!podiumData) {
+      return { processed: false, reason: 'Failed to get podium data' };
+    }
+
+    const ownerFid = Number(podiumData.ownerFid);
+    if (ownerFid === 0) {
+      return { processed: false, reason: 'Invalid owner FID' };
+    }
+
+    // 3. Get owner's wallet address
+    const ownerWallet = await this.getFidWallet(podiumData.ownerFid);
+    if (!ownerWallet) {
+      return { processed: false, reason: 'Owner has no wallet' };
+    }
+
+    // 4. Calculate fee
+    const voteCostBrnd = Number(formatUnits(BigInt(voteCostWei), 18));
+    const feeBrnd = this.calculateFee(voteCostBrnd);
+    const feeWei = parseUnits(feeBrnd.toString(), 18).toString();
+
+    if (dryRun) {
+      console.log(`      [DRY RUN] Would distribute ${feeBrnd} BRND to FID ${ownerFid} for collectible #${tokenId}`);
+      return { processed: true };
+    }
+
+    // 5. CRITICAL: Use INSERT IGNORE to atomically check-and-insert
+    // This ensures only ONE process can ever create a record for this vote
+    // If another process already inserted, affectedRows will be 0
+    const [insertResult] = await this.mysqlConn.execute(
+      `INSERT IGNORE INTO repeat_fee_distributions
+       (voteTransactionHash, tokenId, brand1Id, brand2Id, brand3Id, voterFid, voterWallet,
+        ownerFid, ownerWallet, feeAmountWei, feeAmountBrnd, voteCostBrnd, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [
+        voteTransactionHash,
+        Number(tokenId),
+        brandIds[0],
+        brandIds[1],
+        brandIds[2],
+        voterFid,
+        voterWallet || null,
+        ownerFid,
+        ownerWallet,
+        feeWei,
+        feeBrnd,
+        voteCostBrnd,
+      ],
+    );
+
+    // If affectedRows is 0, another process already claimed this vote - DO NOT send tokens
+    if ((insertResult as any).affectedRows === 0) {
+      return { processed: false, reason: 'Already processed' };
+    }
+
+    // 7. Check treasury balance
+    const treasuryBalance = await this.getTreasuryBalance();
+    if (treasuryBalance < feeBrnd) {
+      await this.mysqlConn.execute(
+        `UPDATE repeat_fee_distributions SET status = 'failed', errorMessage = ?, processedAt = NOW()
+         WHERE voteTransactionHash = ?`,
+        [`Insufficient treasury balance: ${treasuryBalance} BRND`, voteTransactionHash],
+      );
+      await this.sendTreasuryLowAlert(treasuryBalance);
+      return { processed: false, reason: 'Insufficient treasury balance' };
+    }
+
+    // Send alert if balance is low
+    if (treasuryBalance < this.TREASURY_ALERT_THRESHOLD) {
+      await this.sendTreasuryLowAlert(treasuryBalance);
+    }
+
+    // 8. Send BRND transfer
+    const transferResult = await this.sendBrndFromTreasury(ownerWallet, feeBrnd);
+
+    if (transferResult.success) {
+      await this.mysqlConn.execute(
+        `UPDATE repeat_fee_distributions SET status = 'success', transferTxHash = ?, processedAt = NOW()
+         WHERE voteTransactionHash = ?`,
+        [transferResult.txHash, voteTransactionHash],
+      );
+
+      console.log(`      ✅ Fee: ${feeBrnd} BRND -> FID ${ownerFid} (TX: ${transferResult.txHash?.slice(0, 10)}...)`);
+
+      // 9. Send notification
+      try {
+        const voterUsername = await this.getVoterUsername(voterFid);
+        const brandNames = await this.getBrandNames(brandIds);
+        const brandList = brandNames.join(', ');
+        const truncatedBrandList = brandList.length > 60 ? brandList.slice(0, 57) + '...' : brandList;
+
+        const title = `+${feeBrnd} $BRND earned!`;
+        const body = `@${voterUsername} voted [${truncatedBrandList}]`;
+
+        const notifSent = await this.sendNotification(ownerFid, title, body, `repeat-fee-${voteTransactionHash}`);
+        if (notifSent) {
+          await this.mysqlConn.execute(
+            'UPDATE repeat_fee_distributions SET notificationSent = true WHERE voteTransactionHash = ?',
+            [voteTransactionHash],
+          );
+        }
+      } catch (error) {
+        // Don't fail for notification errors
+      }
+
+      return { processed: true };
+    } else {
+      await this.mysqlConn.execute(
+        `UPDATE repeat_fee_distributions SET status = 'failed', errorMessage = ?, processedAt = NOW()
+         WHERE voteTransactionHash = ?`,
+        [transferResult.error || 'Transfer failed', voteTransactionHash],
+      );
+      return { processed: false, reason: transferResult.error };
+    }
+  }
 }
 
 // ============================================================================
@@ -177,6 +628,7 @@ async function promptForOptions(): Promise<SyncOptions> {
 class IndexerSyncer {
   private pgClient: Client;
   private mysqlConn: mysql.Connection | null = null;
+  private feeProcessor: RepeatFeeProcessor | null = null;
   private schema: string;
   private stats: SyncStats;
 
@@ -196,6 +648,9 @@ class IndexerSyncer {
       usersUpdated: 0,
       votesChecked: 0,
       votesInserted: 0,
+      feesProcessed: 0,
+      feesSucceeded: 0,
+      feesFailed: 0,
       errors: [],
       startTime: new Date(),
     };
@@ -225,6 +680,15 @@ class IndexerSyncer {
 
     this.mysqlConn = await mysql.createConnection(mysqlConfig);
     console.log('✅ Connected to MySQL production database');
+
+    // Initialize fee processor
+    try {
+      this.feeProcessor = new RepeatFeeProcessor(this.mysqlConn);
+      console.log('✅ Repeat fee processor initialized');
+    } catch (error) {
+      console.log('⚠️ Repeat fee processor not initialized (PRIVATE_KEY or BASE_RPC_URL may be missing)');
+      this.feeProcessor = null;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -484,6 +948,31 @@ class IndexerSyncer {
 
           this.stats.votesInserted++;
           existingTxSet.add(txHash);
+
+          // Process repeat fee distribution if this vote matches a collectible
+          if (this.feeProcessor) {
+            try {
+              const feeResult = await this.feeProcessor.processVoteFee({
+                voteTransactionHash: txHash,
+                brandIds: [brandIdsArray[0], brandIdsArray[1], brandIdsArray[2]] as [number, number, number],
+                voterFid: vote.fid,
+                voterWallet: vote.voter,
+                voteCostWei: vote.cost,
+                dryRun,
+              });
+
+              if (feeResult.processed) {
+                this.stats.feesProcessed++;
+                this.stats.feesSucceeded++;
+              } else if (feeResult.reason && feeResult.reason !== 'Not a collectible' && feeResult.reason !== 'Already processed') {
+                this.stats.feesProcessed++;
+                this.stats.feesFailed++;
+              }
+            } catch (feeError) {
+              const feeMsg = feeError instanceof Error ? feeError.message : String(feeError);
+              this.stats.errors.push(`Fee processing for ${txHash}: ${feeMsg}`);
+            }
+          }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           this.stats.errors.push(`Vote ${txHash}: ${msg}`);
@@ -493,11 +982,14 @@ class IndexerSyncer {
       // Progress log
       const progress = Math.min(i + BATCH_SIZE, indexerVotes.length);
       process.stdout.write(
-        `\r   Processing: ${progress}/${indexerVotes.length} (${this.stats.votesInserted} inserted)`,
+        `\r   Processing: ${progress}/${indexerVotes.length} (${this.stats.votesInserted} inserted, ${this.stats.feesSucceeded} fees)`,
       );
     }
 
     console.log(`\n   ✅ ${dryRun ? 'Would insert' : 'Inserted'} ${this.stats.votesInserted} votes`);
+    if (this.stats.feesProcessed > 0 || this.stats.feesSucceeded > 0) {
+      console.log(`   💰 Fees: ${this.stats.feesSucceeded} succeeded, ${this.stats.feesFailed} failed`);
+    }
   }
 
   private async syncBrands(windowHours: number, dryRun: boolean = false): Promise<void> {
@@ -743,6 +1235,9 @@ class IndexerSyncer {
     console.log(`Users updated:      ${this.stats.usersUpdated}`);
     console.log(`Votes checked:      ${this.stats.votesChecked}`);
     console.log(`Votes inserted:     ${this.stats.votesInserted}`);
+    console.log(`Fees processed:     ${this.stats.feesProcessed}`);
+    console.log(`Fees succeeded:     ${this.stats.feesSucceeded}`);
+    console.log(`Fees failed:        ${this.stats.feesFailed}`);
     console.log(`Errors:             ${this.stats.errors.length}`);
     console.log('='.repeat(50));
 

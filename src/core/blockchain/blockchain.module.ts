@@ -13,12 +13,14 @@ import { DataRepairService } from './services/data-repair.service';
 import { BrandSyncService } from './services/brand-sync.service';
 import { PodiumService } from './services/podium.service';
 import { IndexerSyncService } from './services/indexer-sync.service';
+import { RepeatFeeService } from './services/repeat-fee.service';
 import { UserService } from '../user/services';
 import { AdminService } from '../admin/services/admin.service';
 import { IpfsService } from '../../utils/ipfs.service';
 import { AuthModule } from '../auth/auth.module';
 import { EmbedsModule } from '../embeds/embeds.module';
 import { BrandModule } from '../brand/brand.module';
+import { NotificationModule } from '../notification/notification.module';
 
 import {
   User,
@@ -29,6 +31,7 @@ import {
   AirdropSnapshot,
   AirdropScore,
   CollectibleActivity,
+  RepeatFeeDistribution,
 } from '../../models';
 
 @Module({
@@ -42,9 +45,11 @@ import {
       AirdropSnapshot,
       AirdropScore,
       CollectibleActivity,
+      RepeatFeeDistribution,
     ]),
     forwardRef(() => AuthModule),
     forwardRef(() => BrandModule),
+    forwardRef(() => NotificationModule),
     EmbedsModule,
   ],
   controllers: [BlockchainController],
@@ -60,6 +65,7 @@ import {
     IndexerSyncService,
     DataRepairService,
     BrandSyncService,
+    RepeatFeeService,
     UserService,
     AdminService,
     IpfsService,
@@ -76,6 +82,7 @@ import {
     IndexerSyncService,
     DataRepairService,
     BrandSyncService,
+    RepeatFeeService,
   ],
 })
 export class BlockchainModule {}

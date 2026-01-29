@@ -9,3 +9,4 @@ export { IndexerSyncService } from './indexer-sync.service';
 export { DataRepairService } from './data-repair.service';
 export { BrandSyncService } from './brand-sync.service';
 export { PodiumService } from './podium.service';
+export { RepeatFeeService } from './repeat-fee.service';
