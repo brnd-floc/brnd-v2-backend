@@ -10,8 +10,6 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  keccak256,
-  encodeAbiParameters,
   parseUnits,
   formatUnits,
 } from 'viem';
@@ -29,6 +27,13 @@ const PODIUM_COLLECTIBLES_ABI = [
     name: 'arrangementToTokenId',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' }],
+    name: 'getArrangementHash',
+    outputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
+    stateMutability: 'pure',
     type: 'function',
   },
   {
@@ -114,21 +119,19 @@ export class RepeatFeeService {
   }
 
   /**
-   * Calculate arrangement hash from brand IDs (same as contract)
-   * Order matters: [1,2,3] != [3,2,1]
+   * Get arrangement hash directly from the contract
+   * This ensures we use the exact same hash calculation as the contract
    */
-  private calculateArrangementHash(
+  private async getArrangementHashFromContract(
     brandIds: [number, number, number],
-  ): `0x${string}` {
-    const encoded = encodeAbiParameters(
-      [
-        { name: 'brand1', type: 'uint16' },
-        { name: 'brand2', type: 'uint16' },
-        { name: 'brand3', type: 'uint16' },
-      ],
-      [brandIds[0], brandIds[1], brandIds[2]],
-    );
-    return keccak256(encoded);
+  ): Promise<`0x${string}`> {
+    const hash = await this.publicClient.readContract({
+      address: this.PODIUM_CONTRACT_ADDRESS,
+      abi: PODIUM_COLLECTIBLES_ABI,
+      functionName: 'getArrangementHash',
+      args: [[brandIds[0], brandIds[1], brandIds[2]]],
+    });
+    return hash as `0x${string}`;
   }
 
   /**
@@ -139,13 +142,18 @@ export class RepeatFeeService {
     brandIds: [number, number, number],
   ): Promise<bigint> {
     try {
-      const arrangementHash = this.calculateArrangementHash(brandIds);
+      // Get the hash directly from the contract to ensure consistency
+      const arrangementHash = await this.getArrangementHashFromContract(brandIds);
+      this.logger.debug(
+        `🔍 Checking arrangement hash for [${brandIds.join(', ')}]: ${arrangementHash}`,
+      );
       const tokenId = await this.publicClient.readContract({
         address: this.PODIUM_CONTRACT_ADDRESS,
         abi: PODIUM_COLLECTIBLES_ABI,
         functionName: 'arrangementToTokenId',
         args: [arrangementHash],
       });
+      this.logger.debug(`🔍 Contract returned tokenId: ${tokenId}`);
       return tokenId as bigint;
     } catch (error) {
       this.logger.error(
