@@ -661,7 +661,6 @@ class IndexerSyncer {
 
     // Connect to PostgreSQL
     await this.pgClient.connect();
-    console.log('✅ Connected to PostgreSQL indexer');
 
     // Connect to MySQL
     const mysqlConfig = {
@@ -679,7 +678,6 @@ class IndexerSyncer {
     }
 
     this.mysqlConn = await mysql.createConnection(mysqlConfig);
-    console.log('✅ Connected to MySQL production database');
 
     // Initialize fee processor
     try {
