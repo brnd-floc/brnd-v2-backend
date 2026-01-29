@@ -6,6 +6,7 @@ import { Brand, User, UserBrandVotes } from '../../../models';
 import { UserService } from '../../user/services';
 import { BrandService } from '../../brand/services';
 import { BlockchainService } from './blockchain.service';
+import { RepeatFeeService } from './repeat-fee.service';
 import { logger } from '../../../main';
 import { getConfig } from '../../../security/config';
 import {
@@ -30,6 +31,8 @@ export class IndexerService {
     private readonly podiumService: PodiumService,
     @Inject(forwardRef(() => BlockchainService))
     private readonly blockchainService: BlockchainService,
+    @Inject(forwardRef(() => RepeatFeeService))
+    private readonly repeatFeeService: RepeatFeeService,
   ) {}
 
   /**
@@ -544,6 +547,33 @@ export class IndexerService {
       // } catch (error) {
       //   logger.error(`❌ [INDEXER] Error generating podium image:`, error);
       // }
+
+      // Process repeat fee distribution (send 10% to podium NFT owner if applicable)
+      try {
+        const feeResult = await this.repeatFeeService.processVoteFeeDistribution({
+          voteTransactionHash: voteData.transactionHash,
+          brandIds: [voteData.brandIds[0], voteData.brandIds[1], voteData.brandIds[2]],
+          voterFid: voteData.fid,
+          voterWallet: voteData.voter,
+          voteCostWei: voteData.cost,
+        });
+
+        if (feeResult.processed) {
+          logger.log(
+            `💰 [INDEXER] Repeat fee distributed for vote ${voteData.transactionHash}`,
+          );
+        } else {
+          logger.log(
+            `⏭️ [INDEXER] Repeat fee not applicable: ${feeResult.reason}`,
+          );
+        }
+      } catch (feeError) {
+        // Don't fail the vote processing if fee distribution fails
+        logger.error(
+          `⚠️ [INDEXER] Failed to process repeat fee for vote ${voteData.transactionHash}:`,
+          feeError,
+        );
+      }
 
       logger.log(`✅ [INDEXER] Vote processing completed: ${voteData.id}`);
     } catch (error) {
