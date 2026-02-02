@@ -727,4 +727,88 @@ export class IndexerSyncService {
       }
     }
   }
+
+  /**
+   * Query collectible data directly from the indexer for given brand combinations
+   * Returns a map of arrangementKey -> collectible data
+   */
+  async getCollectiblesFromIndexer(
+    brandCombinations: Array<[number, number, number]>,
+  ): Promise<
+    Map<
+      string,
+      {
+        tokenId: number;
+        ownerFid: number;
+        ownerWallet: string;
+        price: string;
+        claimCount: number;
+        genesisCreatorFid: number;
+        totalFeesEarned: string;
+      }
+    >
+  > {
+    const result = new Map();
+
+    if (brandCombinations.length === 0) {
+      return result;
+    }
+
+    try {
+      await this.connectToIndexer();
+      const schema = this.getSchema();
+
+      // Build query to get all collectibles for the given brand combinations
+      const conditions = brandCombinations
+        .map(
+          (_, i) =>
+            `(gold_brand_id = $${i * 3 + 1} AND silver_brand_id = $${i * 3 + 2} AND bronze_brand_id = $${i * 3 + 3})`,
+        )
+        .join(' OR ');
+
+      const params = brandCombinations.flat();
+
+      const query = `
+        SELECT
+          token_id,
+          gold_brand_id,
+          silver_brand_id,
+          bronze_brand_id,
+          current_owner_fid,
+          current_owner_wallet,
+          current_price,
+          claim_count,
+          genesis_creator_fid,
+          total_fees_earned
+        FROM "${schema}".podium_collectibles
+        WHERE ${conditions}
+      `;
+
+      const queryResult = await this.indexerClient!.query(query, params);
+
+      for (const row of queryResult.rows) {
+        const key = `${row.gold_brand_id}-${row.silver_brand_id}-${row.bronze_brand_id}`;
+        result.set(key, {
+          tokenId: Number(row.token_id),
+          ownerFid: Number(row.current_owner_fid),
+          ownerWallet: row.current_owner_wallet,
+          price: row.current_price?.toString() || '0',
+          claimCount: Number(row.claim_count),
+          genesisCreatorFid: Number(row.genesis_creator_fid),
+          totalFeesEarned: row.total_fees_earned?.toString() || '0',
+        });
+      }
+
+      this.logger.debug(
+        `Fetched ${result.size} collectibles from indexer for ${brandCombinations.length} combinations`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to fetch collectibles from indexer:', error);
+      // Return empty map on error - will fall back to MySQL data
+    } finally {
+      await this.disconnectFromIndexer();
+    }
+
+    return result;
+  }
 }

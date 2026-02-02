@@ -1,5 +1,5 @@
 // Dependencies
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository, In, MoreThan } from 'typeorm';
 
@@ -16,6 +16,7 @@ import {
 } from '../../../models';
 import { logger } from 'src/main';
 import { AirdropContractService } from '../../airdrop/services/airdrop-contract.service';
+import { IndexerSyncService } from '../../blockchain/services/indexer-sync.service';
 import { getConfig } from '../../../security/config';
 import { of } from 'rxjs';
 
@@ -76,6 +77,10 @@ export class UserService {
 
     @Optional()
     private readonly airdropContractService?: AirdropContractService,
+
+    @Optional()
+    @Inject(forwardRef(() => IndexerSyncService))
+    private readonly indexerSyncService?: IndexerSyncService,
   ) {}
 
   /**
@@ -147,6 +152,20 @@ export class UserService {
       ...(relations.length > 0 && {
         relations,
       }),
+    });
+  }
+
+  /**
+   * Retrieves multiple users by their Farcaster IDs.
+   *
+   * @param {number[]} fids - Array of Farcaster IDs to look up.
+   * @returns {Promise<User[]>} Array of user entities found.
+   */
+  async getByFids(fids: number[]): Promise<User[]> {
+    if (fids.length === 0) return [];
+    return this.userRepository.find({
+      where: { fid: In(fids) },
+      select: ['id', 'fid', 'username', 'photoUrl'],
     });
   }
 
@@ -419,18 +438,111 @@ export class UserService {
       return { count: 0, data: [] };
     }
 
-    const data = votes
-      .filter((vote) => vote.brand1 && vote.brand2 && vote.brand3)
-      .map((vote) => ({
+    // Filter valid votes first
+    const validVotes = votes.filter(
+      (vote) => vote.brand1 && vote.brand2 && vote.brand3,
+    );
+
+    // Extract brand combinations to query the indexer
+    const brandCombinations: Array<[number, number, number]> = validVotes.map(
+      (vote) => [vote.brand1.id, vote.brand2.id, vote.brand3.id],
+    );
+
+    // Query indexer for up-to-date collectible data
+    let indexerCollectibles = new Map<
+      string,
+      {
+        tokenId: number;
+        ownerFid: number;
+        ownerWallet: string;
+        price: string;
+        claimCount: number;
+        genesisCreatorFid: number;
+        totalFeesEarned: string;
+      }
+    >();
+
+    if (this.indexerSyncService && brandCombinations.length > 0) {
+      try {
+        indexerCollectibles =
+          await this.indexerSyncService.getCollectiblesFromIndexer(
+            brandCombinations,
+          );
+      } catch (error) {
+        logger.warn(
+          'Failed to fetch collectibles from indexer, using MySQL data:',
+          error,
+        );
+      }
+    }
+
+    // Get usernames for all owner FIDs from indexer data
+    const ownerFids = new Set<number>();
+    const genesisFids = new Set<number>();
+    for (const collectible of indexerCollectibles.values()) {
+      if (collectible.ownerFid) ownerFids.add(collectible.ownerFid);
+      if (collectible.genesisCreatorFid)
+        genesisFids.add(collectible.genesisCreatorFid);
+    }
+
+    const fidToUser = new Map<number, { username: string; photoUrl: string }>();
+    if (ownerFids.size > 0 || genesisFids.size > 0) {
+      const allFids = [...ownerFids, ...genesisFids];
+      const users = await this.userRepository.find({
+        where: { fid: In(allFids) },
+        select: ['fid', 'username', 'photoUrl'],
+      });
+      for (const user of users) {
+        fidToUser.set(user.fid, {
+          username: user.username,
+          photoUrl: user.photoUrl,
+        });
+      }
+    }
+
+    // Map votes with enriched collectible data
+    const data = validVotes.map((vote) => {
+      const key = `${vote.brand1.id}-${vote.brand2.id}-${vote.brand3.id}`;
+      const indexerData = indexerCollectibles.get(key);
+
+      // Use indexer data if available, otherwise fall back to MySQL
+      if (indexerData) {
+        const ownerUser = fidToUser.get(indexerData.ownerFid);
+        const genesisUser = fidToUser.get(indexerData.genesisCreatorFid);
+
+        return {
+          user: vote.user,
+          id: vote.transactionHash,
+          date: vote.date.toISOString(),
+          brand1: vote.brand1,
+          brand2: vote.brand2,
+          brand3: vote.brand3,
+          isLastVoteForCombination: vote.isLastVoteForCombination || false,
+          // Collectible data from indexer (source of truth)
+          isCollectible: true,
+          collectibleTokenId: indexerData.tokenId,
+          collectiblePrice: indexerData.price,
+          collectibleClaimCount: indexerData.claimCount,
+          collectibleGenesisCreatorFid: indexerData.genesisCreatorFid,
+          collectibleGenesisCreatorUsername: genesisUser?.username || null,
+          collectibleOwnerFid: indexerData.ownerFid,
+          collectibleOwnerUsername: ownerUser?.username || null,
+          collectibleOwner: ownerUser
+            ? { username: ownerUser.username, photoUrl: ownerUser.photoUrl }
+            : null,
+          collectibleTotalFeesEarned: indexerData.totalFeesEarned,
+        };
+      }
+
+      // Fall back to MySQL data
+      return {
         user: vote.user,
         id: vote.transactionHash,
         date: vote.date.toISOString(),
         brand1: vote.brand1,
         brand2: vote.brand2,
         brand3: vote.brand3,
-        // Mintability - only the last voter for a combination can mint
         isLastVoteForCombination: vote.isLastVoteForCombination || false,
-        // Collectible data
         isCollectible: vote.isCollectible || false,
         collectibleTokenId: vote.collectibleTokenId || null,
         collectiblePrice: vote.collectiblePrice || null,
@@ -440,8 +552,15 @@ export class UserService {
           vote.collectibleGenesisCreator?.username || null,
         collectibleOwnerFid: vote.collectibleOwnerFid || null,
         collectibleOwnerUsername: vote.collectibleOwner?.username || null,
+        collectibleOwner: vote.collectibleOwner
+          ? {
+              username: vote.collectibleOwner.username,
+              photoUrl: vote.collectibleOwner.photoUrl,
+            }
+          : null,
         collectibleTotalFeesEarned: vote.collectibleTotalFeesEarned || '0',
-      }));
+      };
+    });
 
     return { count, data };
   }

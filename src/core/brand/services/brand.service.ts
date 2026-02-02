@@ -1,5 +1,5 @@
 // Dependencies
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Like, MoreThan, Not, Repository } from 'typeorm';
 
@@ -9,6 +9,7 @@ import { Brand, UserBrandVotes } from '../../../models';
 // Services
 import { UserService } from '../../user/services';
 import { BrandMetricsService } from './brand-metrics.service';
+import { IndexerSyncService } from '../../blockchain/services/indexer-sync.service';
 import { User } from '../../../security/decorators';
 import NeynarService from '../../../utils/neynar';
 import { getConfig } from '../../../security/config';
@@ -31,6 +32,10 @@ export class BrandService {
 
     private readonly userService: UserService,
     private readonly brandMetricsService: BrandMetricsService,
+
+    @Optional()
+    @Inject(forwardRef(() => IndexerSyncService))
+    private readonly indexerSyncService?: IndexerSyncService,
   ) {}
 
   // Add these methods to your BrandService (brand.service.ts)
@@ -1093,13 +1098,112 @@ export class BrandService {
       `🏆 [BrandService] Found ${count} total podiums, returning ${podiums.length} for this page`,
     );
 
-    // Transform data to match the structure returned by getVotesHistory
-    const data = podiums
-      .filter((vote) => vote.brand1 && vote.brand2 && vote.brand3)
-      .map((vote) => ({
+    // Filter valid podiums first
+    const validPodiums = podiums.filter(
+      (vote) => vote.brand1 && vote.brand2 && vote.brand3,
+    );
+
+    // Extract brand combinations to query the indexer
+    const brandCombinations: Array<[number, number, number]> = validPodiums.map(
+      (vote) => [vote.brand1.id, vote.brand2.id, vote.brand3.id],
+    );
+
+    // Query indexer for up-to-date collectible data
+    let indexerCollectibles = new Map<
+      string,
+      {
+        tokenId: number;
+        ownerFid: number;
+        ownerWallet: string;
+        price: string;
+        claimCount: number;
+        genesisCreatorFid: number;
+        totalFeesEarned: string;
+      }
+    >();
+
+    if (this.indexerSyncService && brandCombinations.length > 0) {
+      try {
+        indexerCollectibles =
+          await this.indexerSyncService.getCollectiblesFromIndexer(
+            brandCombinations,
+          );
+      } catch (error) {
+        this.logger.warn(
+          'Failed to fetch collectibles from indexer for recent podiums, using MySQL data',
+        );
+      }
+    }
+
+    // Get usernames for all owner/genesis FIDs from indexer data
+    const ownerFids = new Set<number>();
+    const genesisFids = new Set<number>();
+    for (const collectible of indexerCollectibles.values()) {
+      if (collectible.ownerFid) ownerFids.add(collectible.ownerFid);
+      if (collectible.genesisCreatorFid)
+        genesisFids.add(collectible.genesisCreatorFid);
+    }
+
+    const fidToUser = new Map<
+      number,
+      { username: string; photoUrl: string; fid: number }
+    >();
+    if (ownerFids.size > 0 || genesisFids.size > 0) {
+      const allFids = [...ownerFids, ...genesisFids];
+      const users = await this.userService.getByFids(allFids);
+      for (const user of users) {
+        fidToUser.set(user.fid, {
+          fid: user.fid,
+          username: user.username,
+          photoUrl: user.photoUrl,
+        });
+      }
+    }
+
+    // Transform data with enriched collectible information
+    const data = validPodiums.map((vote) => {
+      const key = `${vote.brand1.id}-${vote.brand2.id}-${vote.brand3.id}`;
+      const indexerData = indexerCollectibles.get(key);
+
+      // Use indexer data if available, otherwise fall back to MySQL
+      if (indexerData) {
+        const ownerUser = fidToUser.get(indexerData.ownerFid);
+        const genesisUser = fidToUser.get(indexerData.genesisCreatorFid);
+
+        return {
+          id: vote.transactionHash,
+          date: vote.date.toISOString(),
+          user: vote.user
+            ? {
+                fid: vote.user.fid,
+                username: vote.user.username,
+                photoUrl: vote.user.photoUrl,
+              }
+            : null,
+          brand1: vote.brand1,
+          brand2: vote.brand2,
+          brand3: vote.brand3,
+          brndPaidWhenCreatingPodium: vote.brndPaidWhenCreatingPodium,
+          claimed: vote.claimTxHash !== null,
+          isLastVoteForCombination: vote.isLastVoteForCombination || false,
+          // Collectible data from indexer (source of truth)
+          isCollectible: true,
+          collectibleTokenId: indexerData.tokenId,
+          collectiblePrice: indexerData.price,
+          collectibleClaimCount: indexerData.claimCount,
+          collectibleGenesisCreatorFid: indexerData.genesisCreatorFid,
+          collectibleGenesisCreatorUsername: genesisUser?.username || null,
+          collectibleOwnerFid: indexerData.ownerFid,
+          collectibleOwnerUsername: ownerUser?.username || null,
+          collectibleTotalFeesEarned: indexerData.totalFeesEarned,
+          collectibleOwner: ownerUser || null,
+        };
+      }
+
+      // Fall back to MySQL data
+      return {
         id: vote.transactionHash,
         date: vote.date.toISOString(),
-        // User who created the podium
         user: vote.user
           ? {
               fid: vote.user.fid,
@@ -1110,11 +1214,9 @@ export class BrandService {
         brand1: vote.brand1,
         brand2: vote.brand2,
         brand3: vote.brand3,
-        // Mintability - only the last voter for a combination can mint
         brndPaidWhenCreatingPodium: vote.brndPaidWhenCreatingPodium,
         claimed: vote.claimTxHash !== null,
         isLastVoteForCombination: vote.isLastVoteForCombination || false,
-        // Collectible data
         isCollectible: vote.isCollectible || false,
         collectibleTokenId: vote.collectibleTokenId || null,
         collectiblePrice: vote.collectiblePrice || null,
@@ -1126,7 +1228,8 @@ export class BrandService {
         collectibleOwnerUsername: vote.collectibleOwner?.username || null,
         collectibleTotalFeesEarned: vote.collectibleTotalFeesEarned || '0',
         collectibleOwner: vote.collectibleOwner || null,
-      }));
+      };
+    });
 
     return { count, data };
   }
@@ -1300,7 +1403,9 @@ export class BrandService {
     await this.userService.updateUserCalculatedFields(user.id);
 
     await this.userService.addPoints(user.id, 3);
-    await this.updateBrandScores(brandIds);
+
+    // Note: Brand scores are updated by the IndexerService when blockchain votes are processed
+    // The score is calculated as a percentage of BRND paid (60%/30%/10% for 1st/2nd/3rd place)
 
     // Update brand metrics asynchronously after vote
     setImmediate(() => {
@@ -1383,27 +1488,4 @@ export class BrandService {
     }
   }
 
-  private async updateBrandScores(brandIds: Brand['id'][]): Promise<void> {
-    const [firstPlace, secondPlace, thirdPlace] = brandIds;
-
-    await Promise.all([
-      // First place (60 points) - update ALL score fields
-      this.brandRepository.increment({ id: firstPlace }, 'score', 60),
-      this.brandRepository.increment({ id: firstPlace }, 'stateScore', 60),
-      this.brandRepository.increment({ id: firstPlace }, 'scoreWeek', 60),
-      this.brandRepository.increment({ id: firstPlace }, 'scoreMonth', 60),
-
-      // Second place (30 points) - update ALL score fields
-      this.brandRepository.increment({ id: secondPlace }, 'score', 30),
-      this.brandRepository.increment({ id: secondPlace }, 'stateScore', 30),
-      this.brandRepository.increment({ id: secondPlace }, 'scoreWeek', 30),
-      this.brandRepository.increment({ id: secondPlace }, 'scoreMonth', 30),
-
-      // Third place (10 points) - update ALL score fields
-      this.brandRepository.increment({ id: thirdPlace }, 'score', 10),
-      this.brandRepository.increment({ id: thirdPlace }, 'stateScore', 10),
-      this.brandRepository.increment({ id: thirdPlace }, 'scoreWeek', 10),
-      this.brandRepository.increment({ id: thirdPlace }, 'scoreMonth', 10),
-    ]);
-  }
 }

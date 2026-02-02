@@ -742,6 +742,22 @@ async claimPodiumSignature(
       });
     }
 
+    // Check BRND balance before generating signature
+    const balanceCheck = await this.podiumService.checkBrndBalance(walletAddress);
+    if (!balanceCheck.sufficient) {
+      const balanceBrnd = Number(balanceCheck.balanceWei / BigInt(1e18));
+      const requiredBrnd = Number(balanceCheck.requiredWei / BigInt(1e18));
+      logger.log(
+        `🚫 [PODIUM] Insufficient BRND balance for FID: ${session.sub}. Has: ${balanceBrnd}, needs: ${requiredBrnd}`,
+      );
+      throw new ForbiddenException({
+        error: 'INSUFFICIENT_BALANCE',
+        message: `Insufficient BRND balance. You need ${requiredBrnd.toLocaleString()} BRND but only have ${balanceBrnd.toLocaleString()} BRND.`,
+        balanceBrnd,
+        requiredBrnd,
+      });
+    }
+
     // ========== NEW: Generate metadata ==========
     
     // 1. Generate podium image and upload to IPFS

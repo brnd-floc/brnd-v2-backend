@@ -947,6 +947,26 @@ class IndexerSyncer {
           this.stats.votesInserted++;
           existingTxSet.add(txHash);
 
+          // Update brand scores (60%/30%/10% of BRND paid for 1st/2nd/3rd place)
+          if (!dryRun && brndPaid > 0) {
+            const score1 = Math.round(0.6 * brndPaid);
+            const score2 = Math.round(0.3 * brndPaid);
+            const score3 = Math.round(0.1 * brndPaid);
+
+            await this.mysqlConn!.execute(
+              `UPDATE brands SET score = score + ? WHERE id = ?`,
+              [score1, brandIdsArray[0]],
+            );
+            await this.mysqlConn!.execute(
+              `UPDATE brands SET score = score + ? WHERE id = ?`,
+              [score2, brandIdsArray[1]],
+            );
+            await this.mysqlConn!.execute(
+              `UPDATE brands SET score = score + ? WHERE id = ?`,
+              [score3, brandIdsArray[2]],
+            );
+          }
+
           // Process repeat fee distribution if this vote matches a collectible
           if (this.feeProcessor) {
             try {

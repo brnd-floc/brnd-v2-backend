@@ -418,7 +418,7 @@ export class IndexerService {
         logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
       }
 
-      // Update brand scores (60, 30, 10 points for 1st, 2nd, 3rd place)
+      // Update brand scores (60%/30%/10% of BRND paid for 1st/2nd/3rd place)
       // Always update score, but conditionally update scoreDay, scoreWeek and scoreMonth
       // based on when the vote was actually cast on-chain
       const score1 = 0.6 * vote.brndPaidWhenCreatingPodium;

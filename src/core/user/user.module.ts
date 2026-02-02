@@ -1,8 +1,9 @@
 // Dependencies
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { AirdropModule } from '../airdrop/airdrop.module';
+import { BlockchainModule } from '../blockchain/blockchain.module';
 
 // Controllers
 import { UserController } from './user.controller';
@@ -31,6 +32,7 @@ import {
     ]),
     AuthModule,
     AirdropModule,
+    forwardRef(() => BlockchainModule), // Import for IndexerSyncService
   ],
   controllers: [UserController],
   providers: [UserService],
