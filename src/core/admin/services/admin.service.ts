@@ -899,7 +899,9 @@ export class AdminService {
       }
 
       // Create new brand entity
+      // IMPORTANT: Set id to match onChainId so database ID matches blockchain ID
       const brand = this.brandRepository.create({
+        id: blockchainBrandDto.id,
         // On-chain data (source of truth)
         onChainId: blockchainBrandDto.id,
         onChainHandle: contractBrand.handle,

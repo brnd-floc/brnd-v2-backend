@@ -587,7 +587,9 @@ export class IndexerSyncService {
           }
 
           // Create the brand
+          // IMPORTANT: Set id to match onChainId so database ID matches blockchain ID
           const newBrand = this.brandRepository.create({
+            id: indexerBrand.id,
             // On-chain data
             onChainId: indexerBrand.id,
             onChainHandle: indexerBrand.handle,
