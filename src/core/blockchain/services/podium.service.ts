@@ -188,7 +188,7 @@ export class PodiumService implements OnModuleInit {
 
   /**
    * Handle PodiumBought event from indexer
-   * Updates all votes with matching tokenId to reflect new ownership
+   * Updates all votes with matching brand combination to reflect new ownership
    */
   async handleCollectibleBought(data: {
     tokenId: number;
@@ -196,17 +196,66 @@ export class PodiumService implements OnModuleInit {
     newOwnerWallet: string;
     price: string;
     claimCount: number;
-    totalFeesEarned?: string; // Add this
+    totalFeesEarned?: string;
   }): Promise<{ affected: number }> {
+    // First, find the brand combination for this tokenId
+    const referenceVote = await this.userBrandVotesRepository
+      .createQueryBuilder('vote')
+      .select([
+        'vote.transactionHash',
+        'vote.brand1',
+        'vote.brand2',
+        'vote.brand3',
+      ])
+      .leftJoin('vote.brand1', 'brand1')
+      .leftJoin('vote.brand2', 'brand2')
+      .leftJoin('vote.brand3', 'brand3')
+      .addSelect(['brand1.id', 'brand2.id', 'brand3.id'])
+      .where('vote.collectibleTokenId = :tokenId', {
+        tokenId: data.tokenId,
+      })
+      .getOne();
+
+    const newOwner = await this.userRepository.findOne({
+      where: { fid: data.newOwnerFid },
+    });
+
+    // Update by brand combination (catches ALL votes including ones without tokenId)
+    if (referenceVote?.brand1?.id && referenceVote?.brand2?.id && referenceVote?.brand3?.id) {
+      const result = await this.userBrandVotesRepository
+        .createQueryBuilder()
+        .update(UserBrandVotes)
+        .set({
+          isCollectible: true,
+          collectibleTokenId: data.tokenId,
+          collectibleOwnerFid: data.newOwnerFid,
+          collectibleOwnerWallet: data.newOwnerWallet,
+          collectibleOwner: newOwner || null,
+          collectiblePrice: data.price,
+          collectibleClaimCount: data.claimCount,
+          collectibleTotalFeesEarned: data.totalFeesEarned || '0',
+        })
+        .where('brand1Id = :b1 AND brand2Id = :b2 AND brand3Id = :b3', {
+          b1: referenceVote.brand1.id,
+          b2: referenceVote.brand2.id,
+          b3: referenceVote.brand3.id,
+        })
+        .execute();
+
+      return { affected: result.affected || 0 };
+    }
+
+    // Fallback: update only by tokenId if no reference vote found
     const result = await this.userBrandVotesRepository
       .createQueryBuilder()
       .update(UserBrandVotes)
       .set({
         collectibleOwnerFid: data.newOwnerFid,
         collectibleOwnerWallet: data.newOwnerWallet,
+        collectibleOwner: newOwner || null,
         collectiblePrice: data.price,
         collectibleClaimCount: data.claimCount,
-        collectibleTotalFeesEarned: data.totalFeesEarned || '0', // Add this
+        collectibleTotalFeesEarned: data.totalFeesEarned || '0',
       })
       .where('collectibleTokenId = :tokenId', { tokenId: data.tokenId })
       .execute();

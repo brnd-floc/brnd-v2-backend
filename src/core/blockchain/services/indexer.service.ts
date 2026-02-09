@@ -380,6 +380,50 @@ export class IndexerService {
         `✅ [INDEXER] Updated isLastVoteForCombination flags for brand combination [${voteData.brandIds.join(', ')}]`,
       );
 
+      // Check if this brand combination already has a collectible (already minted as NFT)
+      // If so, copy collectible data to the new vote for data consistency
+      // This prevents the feed from showing "Mint" instead of "Buy" when the indexer is unavailable
+      const existingCollectible = await this.userBrandVotesRepository
+        .createQueryBuilder('v')
+        .where('v.brand1Id = :b1 AND v.brand2Id = :b2 AND v.brand3Id = :b3', {
+          b1: voteData.brandIds[0],
+          b2: voteData.brandIds[1],
+          b3: voteData.brandIds[2],
+        })
+        .andWhere('v.isCollectible = :isCol', { isCol: true })
+        .andWhere('v.transactionHash != :txHash', {
+          txHash: voteData.transactionHash,
+        })
+        .getOne();
+
+      if (existingCollectible) {
+        await this.userBrandVotesRepository
+          .createQueryBuilder()
+          .update(UserBrandVotes)
+          .set({
+            isCollectible: true,
+            collectibleTokenId: existingCollectible.collectibleTokenId,
+            collectibleOwnerFid: existingCollectible.collectibleOwnerFid,
+            collectibleOwnerWallet: existingCollectible.collectibleOwnerWallet,
+            collectiblePrice: existingCollectible.collectiblePrice,
+            collectibleClaimCount: existingCollectible.collectibleClaimCount,
+            collectibleGenesisCreatorFid:
+              existingCollectible.collectibleGenesisCreatorFid,
+            collectibleTotalFeesEarned:
+              existingCollectible.collectibleTotalFeesEarned,
+            collectibleMintTxHash: existingCollectible.collectibleMintTxHash,
+            collectibleMetadataURI: existingCollectible.collectibleMetadataURI,
+          })
+          .where('transactionHash = :txHash', {
+            txHash: voteData.transactionHash,
+          })
+          .execute();
+
+        logger.log(
+          `✅ [INDEXER] Copied collectible data to new vote for already-minted combination [${voteData.brandIds.join(', ')}]`,
+        );
+      }
+
       if (placeholderClaimData) {
         logger.log(
           `✅ [INDEXER] Saved vote and merged placeholder claim data: ${voteData.id}`,

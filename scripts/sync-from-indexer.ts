@@ -1154,14 +1154,15 @@ class IndexerSyncer {
         if (!dryRun) {
           await this.mysqlConn!.execute(
             `INSERT INTO brands (
-              onChainId, onChainHandle, onChainFid, onChainWalletAddress, onChainCreatedAt,
+              id, onChainId, onChainHandle, onChainFid, onChainWalletAddress, onChainCreatedAt,
               metadataHash, name, url, warpcastUrl, description, imageUrl, profile, channel,
               queryType, followerCount, categoryId, score, stateScore, scoreDay, stateScoreDay,
               scoreWeek, stateScoreWeek, scoreMonth, stateScoreMonth, ranking, rankingWeek,
               rankingMonth, bonusPoints, banned, currentRanking, totalBrndAwarded, availableBrnd,
               createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
             [
+              indexerBrand.id,
               indexerBrand.id,
               indexerBrand.handle,
               indexerBrand.fid,
