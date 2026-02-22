@@ -587,6 +587,9 @@ export class UserService {
         brand_image_url,
         brand_category_id,
         category_name,
+        brand_ticker,
+        brand_contract_address,
+        brand_ticker_token_id,
         SUM(points) as total_points,
         COUNT(*) as vote_count,
         MAX(vote_date) as last_voted
@@ -598,6 +601,9 @@ export class UserService {
           b.imageUrl as brand_image_url,
           b.categoryId as brand_category_id,
           c.name as category_name,
+          b.ticker as brand_ticker,
+          b.contractAddress as brand_contract_address,
+          b.tickerTokenId as brand_ticker_token_id,
           60 as points,
           ubv.date as vote_date
         FROM user_brand_votes ubv
@@ -614,6 +620,9 @@ export class UserService {
           b.imageUrl as brand_image_url,
           b.categoryId as brand_category_id,
           c.name as category_name,
+          b.ticker as brand_ticker,
+          b.contractAddress as brand_contract_address,
+          b.tickerTokenId as brand_ticker_token_id,
           30 as points,
           ubv.date as vote_date
         FROM user_brand_votes ubv
@@ -630,6 +639,9 @@ export class UserService {
           b.imageUrl as brand_image_url,
           b.categoryId as brand_category_id,
           c.name as category_name,
+          b.ticker as brand_ticker,
+          b.contractAddress as brand_contract_address,
+          b.tickerTokenId as brand_ticker_token_id,
           10 as points,
           ubv.date as vote_date
         FROM user_brand_votes ubv
@@ -637,7 +649,7 @@ export class UserService {
         LEFT JOIN categories c ON c.id = b.categoryId
         WHERE ubv.userId = ?
       ) vote_aggregates
-      GROUP BY brand_id, brand_name, brand_image_url, brand_category_id, category_name
+      GROUP BY brand_id, brand_name, brand_image_url, brand_category_id, category_name, brand_ticker, brand_contract_address, brand_ticker_token_id
       ORDER BY total_points DESC, vote_count DESC, last_voted DESC
     `;
 
@@ -673,6 +685,9 @@ export class UserService {
           scoreMonth: 0,
           stateScoreMonth: 0,
           rankingMonth: 0,
+          ticker: result.brand_ticker,
+          contractAddress: result.brand_contract_address,
+          tickerTokenId: result.brand_ticker_token_id,
         } as Brand,
         points: parseInt(result.total_points),
         voteCount: parseInt(result.vote_count),
@@ -720,8 +735,7 @@ export class UserService {
       total = this.leaderboardCache!.total;
     } else {
       // Query directly for season-specific leaderboards
-      const pointsField =
-        season === 's1' ? 'totalS1Points' : 'totalS2Points';
+      const pointsField = season === 's1' ? 'totalS1Points' : 'totalS2Points';
 
       const users = await this.userRepository.find({
         select: [

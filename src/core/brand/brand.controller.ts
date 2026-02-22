@@ -230,6 +230,9 @@ export class BrandController {
         'banned',
         'scoreDay',
         'createdAt',
+        'ticker',
+        'contractAddress',
+        'tickerTokenId',
       ],
       [],
       order,
@@ -831,11 +834,13 @@ export class BrandController {
   @Post('/request')
   @UseGuards(AuthorizationGuard)
   async requestBrand(
-    @Session() user: CurrentUser,
-    @Body() { name }: { name: string },
+    @Session() _user: CurrentUser,
+    @Body() { name: _name }: { name: string },
     @Res() res: Response,
   ): Promise<Response> {
     try {
+      void _user;
+      void _name;
       // (Intentionally left blank: no-op for now, removed logs)
       return hasResponse(res, {});
     } catch (error) {
@@ -850,7 +855,9 @@ export class BrandController {
 
   @Post('/:id/follow')
   @UseGuards(AuthorizationGuard)
-  async followBrand(@Session() user: CurrentUser, @Param('id') id: string) {
+  async followBrand(@Session() _user: CurrentUser, @Param('id') _id: string) {
+    void _user;
+    void _id;
     // (Intentionally left blank: no-op, removed logs)
   }
 
@@ -1008,6 +1015,32 @@ export class BrandController {
         HttpStatus.INTERNAL_SERVER_ERROR,
         'getRecentPodiums',
         'Failed to fetch recent podiums',
+      );
+    }
+  }
+
+  @Get('/public/recent-podiums')
+  async getPublicRecentPodiums(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Res() res: Response,
+  ): Promise<Response> {
+    try {
+      const { count, data } = await this.brandService.getRecentPodiums(
+        page,
+        limit,
+      );
+
+      return hasResponse(res, {
+        count,
+        data,
+      });
+    } catch (error) {
+      return hasError(
+        res,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'getPublicRecentPodiums',
+        'Failed to fetch public recent podiums',
       );
     }
   }
