@@ -16,4 +16,10 @@ export class PrepareMetadataDto {
   fid: number; // Farcaster ID for on-chain creation
   walletAddress: string; // Wallet address for on-chain creation (0x format)
   isEditing: boolean;
+  contractAddress?: string;
+  ticker?: string;
+  tokenContractAddress?: string;
+  tokenTicker?: string;
+  tickerTokenId?: string;
+  guardianFid?: number;
 }

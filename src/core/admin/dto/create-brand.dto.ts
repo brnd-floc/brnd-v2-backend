@@ -10,4 +10,8 @@ export class CreateBrandDto {
   channel?: string; // Optional
   queryType: number; // 0: Channel, 1: Profile
   channelOrProfile?: string; // From frontend form
+  contractAddress?: string;
+  ticker?: string;
+  tickerTokenId?: string;
+  guardianFid?: number; // Canonical guardian fid (legacy mapped to founderFid)
 }

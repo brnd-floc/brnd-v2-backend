@@ -13,6 +13,7 @@ import { UserService } from '../user/services';
 import { BrandSeederService } from './services/brand-seeding.service';
 import { AdminService } from '../admin/services/admin.service';
 import { IpfsService } from '../../utils/ipfs.service';
+import { GuardianProfileService } from './services/guardian-profile.service';
 
 // Models
 import {
@@ -56,6 +57,7 @@ import { NotificationModule } from '../notification/notification.module';
     AdminService,
     BrandSchedulerService,
     IpfsService,
+    GuardianProfileService,
   ],
   exports: [BrandService, BrandRankingService],
 })

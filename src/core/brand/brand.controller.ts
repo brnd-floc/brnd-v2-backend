@@ -15,7 +15,12 @@ import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 
 // Services
-import { BrandOrderType, BrandResponse, BrandService } from './services';
+import {
+  BrandOrderType,
+  BrandResponse,
+  BrandService,
+  GuardianProfileService,
+} from './services';
 import { BrandSeederService } from './services/brand-seeding.service';
 import { UserService } from '../user/services/user.service';
 import { RewardService } from '../blockchain/services/reward.service';
@@ -46,13 +51,28 @@ export class BrandController {
     private readonly rewardService: RewardService,
     private readonly brandSchedulerService: BrandSchedulerService,
     private readonly blockchainService: BlockchainService,
+    private readonly guardianProfileService: GuardianProfileService,
   ) {}
 
   @Get('/brand/:id')
   async getBrandById(
     @Param('id') id: Brand['id'],
   ): Promise<BrandResponse | undefined> {
-    return this.brandService.getById(id, [], ['category']);
+    const result = await this.brandService.getById(id, [], ['category']);
+    if (!result) return undefined;
+    const guardianProfile = await this.guardianProfileService.resolveFromBrand(
+      result.brand,
+    );
+
+    return {
+      ...result,
+      brand: {
+        ...result.brand,
+        tokenContractAddress: (result.brand as any).contractAddress ?? null,
+        tokenTicker: (result.brand as any).ticker ?? null,
+        ...guardianProfile,
+      },
+    } as any;
   }
 
   @Get('/brand/:id/enhanced')
@@ -74,9 +94,14 @@ export class BrandController {
           'Brand not found',
         );
       }
+      const guardianProfile =
+        await this.guardianProfileService.resolveFromBrand(brandResponse.brand);
 
       const enhancedBrand = {
         ...brandResponse.brand,
+        tokenContractAddress: (brandResponse.brand as any).contractAddress ?? null,
+        tokenTicker: (brandResponse.brand as any).ticker ?? null,
+        ...guardianProfile,
         onChain: {
           fid: brandResponse.brand.onChainFid,
           walletAddress: brandResponse.brand.walletAddress,
@@ -214,10 +239,16 @@ export class BrandController {
       limit,
     );
 
+    const normalizedBrands = brands.map((brand: any) => ({
+      ...brand,
+      tokenContractAddress: brand.contractAddress ?? null,
+      tokenTicker: brand.ticker ?? null,
+    }));
+
     return hasResponse(res, {
       pageId,
       count,
-      brands,
+      brands: normalizedBrands,
     });
   }
 
