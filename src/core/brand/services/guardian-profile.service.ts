@@ -64,7 +64,7 @@ export class GuardianProfileService {
       const guardianPfp = user?.pfp_url ?? null;
 
       if (!guardianHandle || !guardianPfp) {
-        this.logger.warn(
+        this.logger.debug(
           `Guardian profile incomplete for FID ${guardianFid}: handle=${Boolean(
             guardianHandle,
           )} pfp=${Boolean(guardianPfp)}`,
