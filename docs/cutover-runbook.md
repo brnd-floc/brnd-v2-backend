@@ -39,6 +39,16 @@ This reports:
 - brands currently mapped to numeric categories
 - duplicate category names by normalized value
 
+### 2.1) Fix category `13` name (if needed)
+
+```bash
+# dry run
+npm run cutover:fix-category-name
+
+# apply (default target: id=13 -> "General")
+npm run cutover:fix-category-name -- --apply
+```
+
 ### 3) Optional token backfill
 
 ```bash

@@ -41,7 +41,8 @@
     "update-rankings": "ts-node scripts/update-global-rankings.ts",
     "update-rankings:dry": "ts-node scripts/update-global-rankings.ts --dry-run",
     "cutover:verify-api": "bun run scripts/cutover/cutover-verify-api.ts",
-    "cutover:audit-categories": "bun run scripts/cutover/audit-category-integrity.ts"
+    "cutover:audit-categories": "bun run scripts/cutover/audit-category-integrity.ts",
+    "cutover:fix-category-name": "bun run scripts/cutover/fix-category-13-name.ts"
   },
   "dependencies": {
     "@farcaster/auth-client": "^0.1.1",
