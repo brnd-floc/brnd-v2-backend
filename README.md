@@ -94,6 +94,8 @@ BRND_SEASON_1_ADDRESS=0x...  # V5 contract address
 ADMIN_PRIVATE_KEY=0x...             # Admin wallet private key for uploads
 ```
 
+For security-hardening environment defaults and rollout guidance, see [docs/env-hardening-reference.md](docs/env-hardening-reference.md) and use [.env.example](.env.example) as the template.
+
 ### Admin Endpoints (Unprotected for Testing)
 
 #### Check Upload Status

@@ -42,7 +42,10 @@
     "update-rankings:dry": "ts-node scripts/update-global-rankings.ts --dry-run",
     "cutover:verify-api": "bun run scripts/cutover/cutover-verify-api.ts",
     "cutover:audit-categories": "bun run scripts/cutover/audit-category-integrity.ts",
-    "cutover:fix-category-name": "bun run scripts/cutover/fix-category-13-name.ts"
+    "cutover:fix-category-name": "bun run scripts/cutover/fix-category-13-name.ts",
+    "test:scripts": "jest --config ./test/jest-scripts.json --runInBand",
+    "test:all": "npm run test -- --runInBand && npm run test:scripts",
+    "verify:release": "npm run test:all && npm run build"
   },
   "dependencies": {
     "@farcaster/auth-client": "^0.1.1",
@@ -112,6 +115,9 @@
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
