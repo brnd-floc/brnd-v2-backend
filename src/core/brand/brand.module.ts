@@ -1,6 +1,7 @@
 // Dependencies
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminGuard, DebugEndpointGuard } from '../../security/guards';
 
 // Controllers
 import { BrandController } from './brand.controller';
@@ -58,6 +59,8 @@ import { NotificationModule } from '../notification/notification.module';
     BrandSchedulerService,
     IpfsService,
     GuardianProfileService,
+    AdminGuard,
+    DebugEndpointGuard,
   ],
   exports: [BrandService, BrandRankingService],
 })

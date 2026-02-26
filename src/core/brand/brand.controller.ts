@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { logger } from '../../main';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 
 // Services
@@ -33,7 +33,12 @@ import { Brand, CurrentUser } from '../../models';
 import { HttpStatus, hasError, hasResponse } from '../../utils';
 
 // Security
-import { AuthorizationGuard, QuickAuthPayload } from '../../security/guards';
+import {
+  AuthorizationGuard,
+  QuickAuthPayload,
+  AdminGuard,
+  DebugEndpointGuard,
+} from '../../security/guards';
 import { Session } from '../../security/decorators';
 import { getConfig } from '../../security/config';
 import NeynarService from 'src/utils/neynar';
@@ -44,6 +49,18 @@ export type BrandTimePeriod = 'day' | 'week' | 'month' | 'all';
 @ApiTags('brand-service')
 @Controller('brand-service')
 export class BrandController {
+  private static readonly DEFAULT_SHARE_EMBED_URLS = [
+    'https://brnd.land',
+    'https://www.brnd.land',
+    'https://frame.brnd.land',
+  ];
+
+  private static readonly DEFAULT_SHARE_EMBED_URLS_LEGACY = [
+    'https://rebrnd.lat',
+    'https://poiesis.anky.app',
+    'https://brnd-v2-backend-production.up.railway.app',
+  ];
+
   constructor(
     private readonly brandService: BrandService,
     private readonly brandSeederService: BrandSeederService,
@@ -53,6 +70,77 @@ export class BrandController {
     private readonly blockchainService: BlockchainService,
     private readonly guardianProfileService: GuardianProfileService,
   ) {}
+
+  private parseUrlList(value?: string): string[] {
+    if (!value) {
+      return [];
+    }
+
+    return value
+      .split(',')
+      .map((url) => url.trim())
+      .filter(Boolean);
+  }
+
+  private warnLegacyEmbedUrlDrift(url: string): void {
+    logger.warn(
+      `event=config_drift_detected component=brand.share_embed domainOrUrl=${url} env=production action=remove_legacy_from_BRAND_SHARE_EMBED_URLS`,
+    );
+  }
+
+  private getVoteShareEmbedBaseUrls(): string[] {
+    const configured = process.env.BRAND_SHARE_EMBED_URLS;
+    const configuredLegacy = process.env.BRAND_SHARE_EMBED_URLS_LEGACY;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (configured !== undefined) {
+      const explicit = this.parseUrlList(configured);
+      if (explicit.length === 0) {
+        throw new Error(
+          'BRAND_SHARE_EMBED_URLS is empty. Provide at least one URL.',
+        );
+      }
+
+      if (isProduction) {
+        const legacySet = new Set(
+          BrandController.DEFAULT_SHARE_EMBED_URLS_LEGACY,
+        );
+        for (const url of explicit) {
+          if (legacySet.has(url)) {
+            this.warnLegacyEmbedUrlDrift(url);
+          }
+        }
+      }
+      return explicit;
+    }
+
+    const primary = [...BrandController.DEFAULT_SHARE_EMBED_URLS];
+    const legacy =
+      configuredLegacy !== undefined
+        ? this.parseUrlList(configuredLegacy)
+        : [...BrandController.DEFAULT_SHARE_EMBED_URLS_LEGACY];
+
+    if (isProduction) {
+      return primary;
+    }
+
+    return Array.from(new Set([...primary, ...legacy]));
+  }
+
+  private getRequestId(res?: Response): string {
+    const headerValue =
+      (res?.req?.headers?.['x-request-id'] as string | string[] | undefined) ??
+      (res?.req?.headers?.['x-correlation-id'] as
+        | string
+        | string[]
+        | undefined);
+
+    if (Array.isArray(headerValue)) {
+      return headerValue[0] || 'n/a';
+    }
+
+    return headerValue || 'n/a';
+  }
 
   @Get('/brand/:id')
   async getBrandById(
@@ -421,13 +509,7 @@ export class BrandController {
         if (hasValidCastHash) {
           castData = await neynar.getCastByHash(castHash);
         } else {
-          const validEmbedUrls = [
-            'https://brnd.land',
-            'https://rebrnd.lat',
-            'https://www.brnd.land',
-            'https://poiesis.anky.app',
-            'https://brnd-v2-backend-production.up.railway.app',
-          ];
+          const validEmbedUrls = this.getVoteShareEmbedBaseUrls();
 
           const expectedTxHash = vote.transactionHash;
 
@@ -524,13 +606,7 @@ export class BrandController {
           );
         }
 
-        const validEmbedUrls = [
-          'https://brnd.land',
-          'https://rebrnd.lat',
-          'https://www.brnd.land',
-          'https://poiesis.anky.app',
-          'https://brnd-v2-backend-production.up.railway.app',
-        ];
+        const validEmbedUrls = this.getVoteShareEmbedBaseUrls();
 
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {
           if ('url' in embed) {
@@ -833,15 +909,20 @@ export class BrandController {
 
   @Post('/request')
   @UseGuards(AuthorizationGuard)
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Deprecated no-op endpoint kept for compatibility',
+  })
   async requestBrand(
-    @Session() _user: CurrentUser,
-    @Body() { name: _name }: { name: string },
+    @Session() user: CurrentUser,
+    @Body() { name: name }: { name: string },
     @Res() res: Response,
   ): Promise<Response> {
     try {
-      void _user;
-      void _name;
-      // (Intentionally left blank: no-op for now, removed logs)
+      logger.warn(
+        `[DEPRECATED_NOOP] endpoint=/brand-service/request fid=${user?.fid ?? 'unknown'} requestId=${this.getRequestId(res)}`,
+      );
+      void name;
       return hasResponse(res, {});
     } catch (error) {
       return hasError(
@@ -855,13 +936,18 @@ export class BrandController {
 
   @Post('/:id/follow')
   @UseGuards(AuthorizationGuard)
-  async followBrand(@Session() _user: CurrentUser, @Param('id') _id: string) {
-    void _user;
-    void _id;
-    // (Intentionally left blank: no-op, removed logs)
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Deprecated no-op endpoint kept for compatibility',
+  })
+  async followBrand(@Session() user: CurrentUser, @Param('id') id: string) {
+    logger.warn(
+      `[DEPRECATED_NOOP] endpoint=/brand-service/${id}/follow fid=${user?.fid ?? 'unknown'}`,
+    );
   }
 
   @Get('/debug/scoring')
+  @UseGuards(AdminGuard, DebugEndpointGuard)
   async debugScoring(@Res() res: Response) {
     try {
       const debugInfo = await this.brandService.getDebugScoringInfo();
