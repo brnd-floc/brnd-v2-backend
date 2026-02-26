@@ -174,6 +174,7 @@ export class Brand {
   @OneToMany('BrandTags', 'brand')
   brandTags: any[];
 
+  // Legacy storage for canonical guardianFid (kept for backward compatibility)
   @Column({ nullable: true })
   founderFid: number;
 
@@ -182,6 +183,9 @@ export class Brand {
 
   @Column({ nullable: true })
   contractAddress: string;
+
+  @Column({ nullable: true })
+  tickerTokenId: string;
 
   @Column({ nullable: true, default: 0 })
   uniqueVotersCount: number;

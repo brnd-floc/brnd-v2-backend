@@ -17,6 +17,8 @@ import { UserBrandVotes } from '../../../models';
 
 @Injectable()
 export class AdminService {
+  private static readonly TICKER_TOKEN_ID_REGEX =
+    /^eip155:\d+\/erc20:0x[a-fA-F0-9]{40}$/;
   private neynarService: NeynarService;
 
   constructor(
@@ -208,6 +210,7 @@ export class AdminService {
 
   async createBrand(createBrandDto: CreateBrandDto): Promise<Brand> {
     console.log('Creating brand with data:', createBrandDto);
+    this.assertValidTickerTokenId(createBrandDto.tickerTokenId);
 
     // Handle channelOrProfile field from frontend
     if (createBrandDto.channelOrProfile) {
@@ -263,6 +266,12 @@ export class AdminService {
       url: createBrandDto.url,
       warpcastUrl,
       description: createBrandDto.description,
+      // Legacy storage field; canonical external name is guardianFid.
+      founderFid:
+        createBrandDto.guardianFid ?? (createBrandDto as any).founderFid,
+      contractAddress: createBrandDto.contractAddress,
+      ticker: createBrandDto.ticker,
+      tickerTokenId: createBrandDto.tickerTokenId,
       imageUrl: createBrandDto.imageUrl || '',
       profile,
       channel,
@@ -296,6 +305,7 @@ export class AdminService {
     updateBrandDto: UpdateBrandDto,
   ): Promise<Brand> {
     console.log(`Updating brand ${id} with data:`, updateBrandDto);
+    this.assertValidTickerTokenId(updateBrandDto.tickerTokenId);
 
     const brand = await this.brandRepository.findOne({
       where: { id },
@@ -322,6 +332,20 @@ export class AdminService {
       brand.description = updateBrandDto.description;
     if (updateBrandDto.imageUrl !== undefined)
       brand.imageUrl = updateBrandDto.imageUrl;
+    if (updateBrandDto.contractAddress !== undefined)
+      brand.contractAddress = updateBrandDto.contractAddress;
+    if (updateBrandDto.ticker !== undefined)
+      brand.ticker = updateBrandDto.ticker;
+    if (updateBrandDto.tickerTokenId !== undefined)
+      brand.tickerTokenId = updateBrandDto.tickerTokenId;
+    if (updateBrandDto.guardianFid !== undefined)
+      brand.founderFid = updateBrandDto.guardianFid;
+    if (
+      updateBrandDto.guardianFid === undefined &&
+      (updateBrandDto as any).founderFid !== undefined
+    ) {
+      brand.founderFid = (updateBrandDto as any).founderFid;
+    }
 
     // Handle profile/channel updates
     if (
@@ -550,6 +574,17 @@ export class AdminService {
         conflicts.push('Channel or profile is required');
       }
 
+      if (
+        prepareMetadataDto.tickerTokenId &&
+        !AdminService.TICKER_TOKEN_ID_REGEX.test(
+          prepareMetadataDto.tickerTokenId,
+        )
+      ) {
+        conflicts.push(
+          'Invalid tickerTokenId format (expected eip155:<chainId>/erc20:0x...)',
+        );
+      }
+
       // 2. Check for duplicate names
       const existingBrandByName = await this.brandRepository.findOne({
         where: { name: prepareMetadataDto.name },
@@ -623,17 +658,14 @@ export class AdminService {
 
       // 6. Validate category exists
       if (prepareMetadataDto.categoryId) {
-        let category = await this.categoryRepository.findOne({
+        const category = await this.categoryRepository.findOne({
           where: { id: prepareMetadataDto.categoryId },
         });
 
         if (!category) {
-          // If the category does not exist, create it on the fly and continue
-          category = this.categoryRepository.create({
-            id: prepareMetadataDto.categoryId,
-            name: `${prepareMetadataDto.categoryId.toString()}`,
-          });
-          await this.categoryRepository.save(category);
+          conflicts.push(
+            `Category with ID ${prepareMetadataDto.categoryId} not found`,
+          );
         }
       }
 
@@ -701,6 +733,8 @@ export class AdminService {
       throw new Error('Valid wallet address is required (0x format)');
     }
 
+    this.assertValidTickerTokenId(prepareMetadataDto.tickerTokenId);
+
     // Check handle uniqueness (check both name and onChainHandle)
     const existingBrand = await this.brandRepository.findOne({
       where: [
@@ -715,6 +749,13 @@ export class AdminService {
       );
     }
 
+    const contractAddress =
+      prepareMetadataDto.contractAddress ??
+      prepareMetadataDto.tokenContractAddress ??
+      '';
+    const ticker =
+      prepareMetadataDto.ticker ?? prepareMetadataDto.tokenTicker ?? '';
+
     // Create metadata JSON object (only upload BrandFormData fields to IPFS)
     const metadata = {
       name: prepareMetadataDto.name,
@@ -728,8 +769,26 @@ export class AdminService {
       channel: prepareMetadataDto.channel,
       queryType: prepareMetadataDto.queryType,
       channelOrProfile: prepareMetadataDto.channelOrProfile,
+      contractAddress,
+      ticker,
+      // Backward/forward compatibility with admin payload naming
+      tokenContractAddress: contractAddress,
+      tokenTicker: ticker,
+      guardianFid:
+        prepareMetadataDto.guardianFid ??
+        (prepareMetadataDto as any).founderFid,
+      tickerTokenId: prepareMetadataDto.tickerTokenId,
       createdAt: new Date().toISOString(),
     };
+
+    console.log('🧪 [IPFS PREPARE] Normalized token metadata payload:', {
+      handle: prepareMetadataDto.handle,
+      contractAddress,
+      ticker,
+      tokenContractAddress: metadata.tokenContractAddress,
+      tokenTicker: metadata.tokenTicker,
+      tickerTokenId: metadata.tickerTokenId ?? null,
+    });
 
     // Upload to IPFS
     const metadataHash = await this.ipfsService.uploadJsonToIpfs(metadata);
@@ -808,9 +867,8 @@ export class AdminService {
       let metadata: any = {};
       if (metadataHash && metadataHash.length > 0) {
         try {
-          metadata = await this.blockchainService.fetchMetadataFromIpfs(
-            metadataHash,
-          );
+          metadata =
+            await this.blockchainService.fetchMetadataFromIpfs(metadataHash);
           console.log('📡 [IPFS] Successfully fetched metadata:', metadata);
         } catch (ipfsError) {
           console.warn(
@@ -819,13 +877,40 @@ export class AdminService {
           );
         }
       } else {
-        console.warn('⚠️  [IPFS] No metadataHash available, skipping IPFS fetch');
+        console.warn(
+          '⚠️  [IPFS] No metadataHash available, skipping IPFS fetch',
+        );
       }
 
-      // Get or create category with fallback
-      const category = await this.getOrCreateCategory(
-        metadata.categoryId || 'General',
-      );
+      // Resolve category from metadata. Numeric values are treated as category IDs.
+      // If an ID is invalid, fallback to "General" instead of creating numeric names like "13".
+      let category: Category;
+      const rawCategoryId = metadata.categoryId;
+      if (typeof rawCategoryId === 'number') {
+        try {
+          category = await this.getOrCreateCategory(rawCategoryId);
+        } catch {
+          category = await this.getOrCreateCategory('General');
+        }
+      } else if (
+        typeof rawCategoryId === 'string' &&
+        rawCategoryId.trim().length > 0
+      ) {
+        const trimmed = rawCategoryId.trim();
+        const numericId = Number(trimmed);
+
+        if (!Number.isNaN(numericId) && Number.isInteger(numericId)) {
+          try {
+            category = await this.getOrCreateCategory(numericId);
+          } catch {
+            category = await this.getOrCreateCategory('General');
+          }
+        } else {
+          category = await this.getOrCreateCategory(trimmed);
+        }
+      } else {
+        category = await this.getOrCreateCategory('General');
+      }
 
       // Process profile/channel logic from metadata
       const { profile, channel, queryType } = this.processProfileAndChannel({
@@ -854,6 +939,10 @@ export class AdminService {
         );
       }
 
+      const metadataContractAddress =
+        metadata.contractAddress ?? metadata.tokenContractAddress;
+      const metadataTicker = metadata.ticker ?? metadata.tokenTicker;
+
       // If brand exists and event is 'updated', update existing brand
       if (existingBrand && blockchainBrandDto.createdOrUpdated === 'updated') {
         console.log(
@@ -867,15 +956,20 @@ export class AdminService {
         existingBrand.metadataHash = metadataHash;
 
         // Update metadata from IPFS (can be updated)
-        existingBrand.name = metadata.name || contractBrand.handle;
-        existingBrand.url = metadata.url || '';
-        existingBrand.warpcastUrl = metadata.warpcastUrl || metadata.url || '';
-        existingBrand.description = metadata.description || '';
-        existingBrand.imageUrl = metadata.imageUrl || '';
-        existingBrand.profile = metadata.profile || profile;
-        existingBrand.channel = metadata.channel || channel;
-        existingBrand.queryType = metadata.queryType ?? queryType;
-        existingBrand.followerCount = metadata.followerCount || followerCount;
+        existingBrand.name = metadata.name || existingBrand.name || contractBrand.handle;
+        existingBrand.url = metadata.url ?? existingBrand.url ?? '';
+        existingBrand.warpcastUrl = metadata.warpcastUrl ?? metadata.url ?? existingBrand.warpcastUrl ?? '';
+        existingBrand.description = metadata.description ?? existingBrand.description ?? '';
+        existingBrand.imageUrl = metadata.imageUrl ?? existingBrand.imageUrl ?? '';
+        existingBrand.profile = metadata.profile ?? existingBrand.profile ?? profile;
+        existingBrand.channel = metadata.channel ?? existingBrand.channel ?? channel;
+        existingBrand.queryType = metadata.queryType ?? existingBrand.queryType ?? queryType;
+        existingBrand.contractAddress = metadataContractAddress ?? existingBrand.contractAddress ?? '';
+        existingBrand.ticker = metadataTicker ?? existingBrand.ticker ?? '';
+        if (typeof metadata.tickerTokenId === 'string') {
+          existingBrand.tickerTokenId = metadata.tickerTokenId;
+        }
+        existingBrand.followerCount = metadata.followerCount ?? existingBrand.followerCount ?? followerCount;
         existingBrand.category = category;
 
         // Note: We preserve scoring fields (score, stateScore, etc.) on update
@@ -919,6 +1013,12 @@ export class AdminService {
         profile: metadata.profile || profile,
         channel: metadata.channel || channel,
         queryType: metadata.queryType ?? queryType,
+        contractAddress: metadataContractAddress || '',
+        ticker: metadataTicker || '',
+        tickerTokenId:
+          typeof metadata.tickerTokenId === 'string'
+            ? metadata.tickerTokenId
+            : undefined,
         followerCount: metadata.followerCount || followerCount,
         category,
 
@@ -960,6 +1060,18 @@ export class AdminService {
       );
       throw new Error(
         `Failed to ${blockchainBrandDto.createdOrUpdated === 'created' ? 'create' : 'update'} brand from blockchain: ${error.message}`,
+      );
+    }
+  }
+
+  private assertValidTickerTokenId(tickerTokenId?: string): void {
+    if (!tickerTokenId) {
+      return;
+    }
+
+    if (!AdminService.TICKER_TOKEN_ID_REGEX.test(tickerTokenId)) {
+      throw new Error(
+        'Invalid tickerTokenId format (expected eip155:<chainId>/erc20:0x...)',
       );
     }
   }
