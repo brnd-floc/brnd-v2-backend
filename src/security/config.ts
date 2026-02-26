@@ -171,6 +171,8 @@ const domains: Domains = {
   LOCAL: [
     'http://127.0.0.1:5173',
     'http://localhost:5173',
+    'https://miniapp.brndland.com',
+    'https://api.brndland.com',
     'https://miniapp.anky.app',
     'https://brnd.lat',
     'https://rebrnd.lat',
@@ -178,17 +180,10 @@ const domains: Domains = {
   ],
   STAGING: [],
   PRO: [
-    'http://127.0.0.1:5173',
-    'http://localhost:5173',
     'https://brnd.land',
     'https://www.brnd.land',
-    'https://rebrnd.lat',
     'https://frame.brnd.land',
-    'https://brnd-frame.azurewebsites.net',
-    'https://miniapp.anky.app',
-    'https://brnd.lat',
-    'https://brnd-dashboard.orbiter.website',
-    '*',
+    'https://api.brndland.com',
   ],
 };
 

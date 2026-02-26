@@ -14,10 +14,8 @@ import { AuthorizationGuard } from './authorization.guard';
 import { AuthService } from '../../core/auth/services';
 
 // Types
-import { CurrentUser, UserRoleEnum } from '../../models/User';
-
-// Utils
-import { logger } from '../../main';
+import { UserRoleEnum } from '../../models/User';
+import { QuickAuthPayload } from './authorization.guard';
 
 /**
  * Admin authorization guard that extends the base AuthorizationGuard.
@@ -25,8 +23,24 @@ import { logger } from '../../main';
  */
 @Injectable()
 export class AdminGuard extends AuthorizationGuard {
+  private readonly fallbackAdminFids = [5431, 16098, 8109, 39278];
+
   constructor(authService: AuthService) {
     super(authService); // Pass AuthService to parent constructor
+  }
+
+  private getConfiguredAdminFids(): number[] {
+    const raw = process.env.ADMIN_FIDS;
+    if (!raw) {
+      return this.fallbackAdminFids;
+    }
+
+    const parsed = raw
+      .split(',')
+      .map((fid) => Number(fid.trim()))
+      .filter((fid) => Number.isFinite(fid));
+
+    return parsed.length > 0 ? parsed : this.fallbackAdminFids;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,10 +54,13 @@ export class AdminGuard extends AuthorizationGuard {
     // Then check if user has admin role
     const req = context
       .switchToHttp()
-      .getRequest<Request & { user: CurrentUser }>();
+      .getRequest<Request & { user: QuickAuthPayload & { role?: UserRoleEnum } }>();
     const user = req.user;
+    const adminFids = this.getConfiguredAdminFids();
+    const hasAdminFid = adminFids.includes(Number(user.sub));
+    const hasAdminRole = user.role === UserRoleEnum.ADMIN;
 
-    if (user.role !== UserRoleEnum.ADMIN) {
+    if (!hasAdminFid && !hasAdminRole) {
       throw new ForbiddenException(
         'You do not have permission to access this resource',
       );

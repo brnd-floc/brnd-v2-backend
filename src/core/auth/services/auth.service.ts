@@ -19,8 +19,29 @@ import { logger } from '../../../main';
 @Injectable()
 export class AuthService implements OnModuleInit {
   private farcasterClient: any;
+  private quickAuthDomains: string[] = [];
+  private quickAuthLegacyDomains: string[] = [];
+
+  private static readonly DEFAULT_QUICKAUTH_DOMAINS_FINAL = [
+    'brnd.land',
+    'www.brnd.land',
+    'frame.brnd.land',
+  ];
+
+  private static readonly DEFAULT_QUICKAUTH_DOMAINS_LEGACY = [
+    'miniapp.anky.app',
+    'brndland.com',
+    'miniapp.brndland.com',
+    'api.brndland.com',
+  ];
 
   constructor() {}
+
+  private warnLegacyDomainDrift(domain: string): void {
+    logger.warn(
+      `event=config_drift_detected component=auth.quickauth domainOrUrl=${domain} env=production action=remove_legacy_from_QUICKAUTH_ALLOWED_DOMAINS`,
+    );
+  }
 
   /**
    * Initializes the Farcaster QuickAuth client on module startup.
@@ -33,10 +54,83 @@ export class AuthService implements OnModuleInit {
       const module = await importFn('@farcaster/quick-auth');
       const { createClient } = module;
       this.farcasterClient = createClient();
+      const domainConfig = this.loadQuickAuthDomainConfig();
+      this.quickAuthDomains = domainConfig.domains;
+      this.quickAuthLegacyDomains = domainConfig.legacyDomains;
     } catch (error) {
       logger.error('Failed to initialize Farcaster QuickAuth client:', error);
       throw new Error('QuickAuth initialization failed: ' + error.message);
     }
+  }
+
+  private parseDomainCsv(value?: string): string[] {
+    if (!value) {
+      return [];
+    }
+
+    return value
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+  }
+
+  private loadQuickAuthDomainConfig(): {
+    domains: string[];
+    legacyDomains: string[];
+  } {
+    const configured = process.env.QUICKAUTH_ALLOWED_DOMAINS;
+    const configuredLegacy = process.env.QUICKAUTH_ALLOWED_DOMAINS_LEGACY;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (configured !== undefined) {
+      const parsed = this.parseDomainCsv(configured);
+
+      if (parsed.length === 0) {
+        throw new Error(
+          'QUICKAUTH_ALLOWED_DOMAINS is empty. Provide at least one allowed domain.',
+        );
+      }
+
+      if (isProduction) {
+        const legacySet = new Set(AuthService.DEFAULT_QUICKAUTH_DOMAINS_LEGACY);
+        for (const domain of parsed) {
+          if (legacySet.has(domain)) {
+            this.warnLegacyDomainDrift(domain);
+          }
+        }
+      }
+
+      return {
+        domains: parsed,
+        legacyDomains: this.parseDomainCsv(configuredLegacy),
+      };
+    }
+
+    const finalDomains = [...AuthService.DEFAULT_QUICKAUTH_DOMAINS_FINAL];
+    const legacyDomains =
+      configuredLegacy !== undefined
+        ? this.parseDomainCsv(configuredLegacy)
+        : [...AuthService.DEFAULT_QUICKAUTH_DOMAINS_LEGACY];
+
+    const composed = isProduction
+      ? finalDomains
+      : [...finalDomains, ...legacyDomains];
+    const uniqueDomains = Array.from(new Set(composed));
+
+    if (uniqueDomains.length === 0) {
+      throw new Error(
+        'QuickAuth allowed domains resolved to an empty list. Configure QUICKAUTH_ALLOWED_DOMAINS.',
+      );
+    }
+
+    return {
+      domains: uniqueDomains,
+      legacyDomains,
+    };
+  }
+
+  private loadQuickAuthDomains(): string[] {
+    return this.loadQuickAuthDomainConfig().domains;
   }
 
   /**
@@ -63,30 +157,40 @@ export class AuthService implements OnModuleInit {
    */
   async verifyQuickAuthToken(token: string) {
     await this.ensureFarcasterClient();
+    const domainsToTry =
+      this.quickAuthDomains.length > 0
+        ? this.quickAuthDomains
+        : this.loadQuickAuthDomains();
+    const legacySet = new Set(this.quickAuthLegacyDomains);
+    let lastError: Error | null = null;
 
-    try {
-      const domain = 'brnd.land';
-      const payload = await this.farcasterClient.verifyJwt({ token, domain });
-
-      if (!payload || !payload.sub) {
-        throw new Error('Invalid token payload: missing user FID');
-      }
-
-      return payload;
-    } catch (error) {
+    for (let i = 0; i < domainsToTry.length; i++) {
+      const domain = domainsToTry[i];
       try {
-        const domain = 'miniapp.anky.app';
         const payload = await this.farcasterClient.verifyJwt({ token, domain });
 
         if (!payload || !payload.sub) {
           throw new Error('Invalid token payload: missing user FID');
         }
 
+        if (i > 0) {
+          const legacySuffix = legacySet.has(domain) ? ' [legacy]' : '';
+          logger.warn(
+            `QuickAuth token verified using fallback domain "${domain}"${legacySuffix} (position ${i + 1}/${domainsToTry.length})`,
+          );
+        }
+
         return payload;
       } catch (error) {
-        logger.error('QuickAuth token verification failed:', error.message);
-        throw new Error('Token verification failed again: ' + error.message);
+        lastError = error as Error;
       }
     }
+
+    logger.error(
+      `QuickAuth token verification failed for all configured domains (${domainsToTry.join(', ')}): ${lastError?.message || 'unknown error'}`,
+    );
+    throw new Error(
+      `Token verification failed: ${lastError?.message || 'unknown error'}`,
+    );
   }
 }

@@ -15,17 +15,11 @@
 // Dependencies
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
-import { Logger } from '@nestjs/common';
-import { NextFunction, Request, Response } from 'express';
-
-// Authentication
-import * as cookieParser from 'cookie-parser';
+import { Logger, ValidationPipe } from '@nestjs/common';
 
 // Security
 import helmet from 'helmet';
-import * as csurf from 'csurf';
-import domains, { csurfConfigOptions, getConfig } from './security/config';
-import { csrfMiddleware } from './security/middlewares';
+import domains, { getConfig } from './security/config';
 
 // Environment
 import * as dotenv from 'dotenv';
@@ -43,12 +37,16 @@ async function bootstrap() {
   try {
     const app = await NestFactory.create(AppModule);
 
-    app.use(cookieParser(process.env.COOKIE_SECRET));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: false,
+      }),
+    );
 
-    const csrf = csurf(csurfConfigOptions);
-    app.use((req: Request, res: Response, next: NextFunction) => {
-      csrfMiddleware(req, res, next, csrf);
-    });
+    // CSRF middleware is intentionally disabled for API paths because
+    // authentication is header-based (Bearer token), not cookie-based.
 
     if (!getConfig().isProduction) {
       const document = SwaggerModule.createDocument(app, swaggerOptions);

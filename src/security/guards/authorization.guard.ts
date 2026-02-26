@@ -10,10 +10,6 @@ import { Request, Response } from 'express';
 // Services
 import { AuthService } from '../../core/auth/services';
 
-// Utils
-import { logger } from '../../main';
-import { getConfig } from '../config';
-
 /**
  * Authorization guard for Farcaster QuickAuth JWT tokens.
  *
@@ -21,7 +17,6 @@ import { getConfig } from '../config';
  * provided by Farcaster miniapp clients. It supports multiple token sources:
  *
  * 1. Authorization header with Bearer token (primary method for miniapps)
- * 2. Authorization cookie (fallback for web-based access)
  *
  * The guard uses Farcaster's QuickAuth verification service to validate tokens
  * cryptographically without requiring database lookups. Verified token payload
@@ -59,12 +54,6 @@ export class AuthorizationGuard implements CanActivate {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       return authHeader.substring(7);
-    }
-
-    // Fallback: Authorization cookie (web compatibility)
-    const cookieToken = req.cookies['Authorization'];
-    if (cookieToken) {
-      return cookieToken;
     }
 
     return null;
