@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DebugEndpointGuard, IndexerGuard } from '../../security/guards';
 
 import { DailyService } from './daily.service';
 import { DailyController } from './daily.controller';
@@ -30,7 +31,7 @@ import {
     forwardRef(() => BlockchainModule), // Import BlockchainModule to access IndexerSyncService
   ],
   controllers: [DailyController],
-  providers: [DailyService, UserService],
+  providers: [DailyService, UserService, DebugEndpointGuard, IndexerGuard],
   exports: [DailyService],
 })
 export class DailyModule {}

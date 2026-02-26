@@ -1,6 +1,7 @@
 // src/core/admin/admin.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminGuard, DebugEndpointGuard } from '../../security/guards';
 
 // Controllers
 import { AdminController } from './admin.controller';
@@ -31,7 +32,7 @@ import { IpfsService } from '../../utils/ipfs.service';
     BrandModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, IpfsService],
+  providers: [AdminService, IpfsService, AdminGuard, DebugEndpointGuard],
   exports: [AdminService],
 })
 export class AdminModule {}

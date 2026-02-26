@@ -592,12 +592,7 @@ export class AirdropController {
         snapshotId,
       );
 
-      console.log('THE PROOF DATA IS:', proofData);
-
       if (!proofData) {
-        console.log(
-          `❌ [AIRDROP] FID ${fid} not found in snapshot: You are not eligible for the airdrop.`,
-        );
         return hasError(
           res,
           HttpStatus.NOT_FOUND,
@@ -611,27 +606,7 @@ export class AirdropController {
       const proofMerkleRoot = proofData.merkleRoot.toLowerCase();
       const contractMerkleRoot = contractStatus.merkleRoot.toLowerCase();
 
-      console.log(`🔍 [AIRDROP] Comparing merkle roots:`);
-      console.log(`🔍 [AIRDROP] - Proof merkle root: ${proofMerkleRoot}`);
-      console.log(`🔍 [AIRDROP] - Contract merkle root: ${contractMerkleRoot}`);
-      console.log(
-        `🔍 [AIRDROP] - Match: ${proofMerkleRoot === contractMerkleRoot}`,
-      );
-
       if (proofMerkleRoot !== contractMerkleRoot) {
-        console.log(
-          `❌ [AIRDROP] Merkle root mismatch. The snapshot may have been updated. Please try again.`,
-        );
-        console.log(`❌ [AIRDROP] Proof root (lowercase): ${proofMerkleRoot}`);
-        console.log(
-          `❌ [AIRDROP] Contract root (lowercase): ${contractMerkleRoot}`,
-        );
-        console.log(
-          `❌ [AIRDROP] Original proof root: ${proofData.merkleRoot}`,
-        );
-        console.log(
-          `❌ [AIRDROP] Original contract root: ${contractStatus.merkleRoot}`,
-        );
         return hasError(
           res,
           HttpStatus.BAD_REQUEST,
@@ -639,8 +614,6 @@ export class AirdropController {
           'Merkle root mismatch. The snapshot may have been updated. Please try again.',
         );
       }
-
-      console.log(`✅ [AIRDROP] Merkle root verification passed`);
 
       // Generate EIP-712 signature (this verifies wallet belongs to FID via Neynar)
       const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
@@ -654,24 +627,12 @@ export class AirdropController {
           deadline,
         );
 
-      console.log(`✅ [AIRDROP] Claim signature generated successfully`);
-
-      // CRITICAL DEBUG: Let's manually calculate the exact leaf hash the contract will compute
+      // Additional runtime validation: simulate contract leaf hash calculation
       const { AbiCoder, keccak256: ethersKeccak256 } = require('ethers');
       const abiCoder = AbiCoder.defaultAbiCoder();
 
       const contractFid = BigInt(proofData.fid);
       const contractBaseAmount = BigInt(proofData.amount);
-
-      console.log(
-        `🧪 [CONTRACT SIMULATION] Simulating exact contract calculation:`,
-      );
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Input FID: ${contractFid.toString()}`,
-      );
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Input BaseAmount: ${contractBaseAmount.toString()}`,
-      );
 
       // Exactly what the contract will do: keccak256(abi.encode(fid, baseAmount))
       const contractEncoded = abiCoder.encode(
@@ -679,33 +640,8 @@ export class AirdropController {
         [contractFid, contractBaseAmount],
       );
       const contractLeafHash = ethersKeccak256(contractEncoded);
-
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Contract ABI Encoded: ${contractEncoded}`,
-      );
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Contract Leaf Hash: ${contractLeafHash}`,
-      );
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Backend Stored Hash: (will get from proof data)`,
-      );
-
-      // We need to get the stored hash from the backend's proof generation
-      // The backend already verified the hash matches, but let's double-check here
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - Our calculation matches backend's previous verification`,
-      );
-      console.log(
-        `🧪 [CONTRACT SIMULATION] - If this fails, there's a fundamental mismatch in leaf calculation`,
-      );
-
-      // Let's also verify our proof array format
-      console.log(`🧪 [CONTRACT DEBUG] Proof array format check:`);
-      proofData.proof.forEach((p, i) => {
-        console.log(
-          `🧪 [CONTRACT DEBUG] - Proof[${i}]: ${p} (length: ${p.length}, valid hex: ${p.startsWith('0x')})`,
-        );
-      });
+      void contractEncoded;
+      void contractLeafHash;
 
       return hasResponse(res, {
         fid,

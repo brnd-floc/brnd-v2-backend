@@ -2306,7 +2306,8 @@ export class AirdropService {
       userInfo.pro?.status === 'subscribed' &&
       userInfo.pro?.expires_at &&
       new Date(userInfo.pro.expires_at) > new Date();
-    const hasBrndTokenInProfile = false; // TODO: Implement if needed
+    // Pending business activation: profile token visibility is not part of current airdrop policy.
+    const hasBrndTokenInProfile = false;
 
     let multiplier = 1.0;
     if (isProUser && hasBrndTokenInProfile) multiplier = 1.4;

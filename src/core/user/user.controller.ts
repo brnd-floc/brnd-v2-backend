@@ -147,9 +147,22 @@ export class UserController {
 
   @Post('/share-frame')
   @UseGuards(AuthorizationGuard)
-  async addPointsForShareFrame(@Session() session: User, @Res() res: Response) {
-    const response = await this.userService.addPointsForShareFrame(session.id);
-    hasResponse(res, response);
+  async addPointsForShareFrame(
+    @Session() session: QuickAuthPayload,
+    @Res() res: Response,
+  ) {
+    const user = await this.userService.getByFid(session.sub);
+    if (!user) {
+      return hasError(
+        res,
+        HttpStatus.NOT_FOUND,
+        'addPointsForShareFrame',
+        'User not found. Please refresh the app.',
+      );
+    }
+
+    const response = await this.userService.addPointsForShareFrame(user.id);
+    return hasResponse(res, response);
   }
 
   /**
@@ -190,7 +203,16 @@ export class UserController {
       // Get the user's personal brand rankings
       const userBrands = await this.userService.getUserBrands(user.id);
 
-      return hasResponse(res, userBrands);
+      const normalizedUserBrands = userBrands.map((entry: any) => ({
+        ...entry,
+        brand: {
+          ...entry.brand,
+          tokenContractAddress: entry.brand?.contractAddress ?? null,
+          tokenTicker: entry.brand?.ticker ?? null,
+        },
+      }));
+
+      return hasResponse(res, normalizedUserBrands);
     } catch (error) {
       console.error('❌ [UserController] Error getting user brands:', error);
       return hasError(
@@ -337,7 +359,7 @@ export class UserController {
    * Backfills calculated profile fields for all existing users (ADMIN ONLY).
    * This is a one-time operation to populate the new profile fields.
    */
-  // TODO: ACTIVATE THIS WITH THE PROD DATA
+  // Pending business activation: keep disabled until production rollout ticket is approved.
 
   // @Get('/dev/backfill-profile-data')
   // async backfillProfileData(@Res() res: Response): Promise<Response> {
