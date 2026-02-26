@@ -245,7 +245,10 @@ export class IndexerSyncService {
   /**
    * Sync votes from indexer to MySQL
    */
-  private async syncVotes(stats: SyncStats, windowHours: number): Promise<void> {
+  private async syncVotes(
+    stats: SyncStats,
+    windowHours: number,
+  ): Promise<void> {
     this.logger.log('Syncing votes...');
     const schema = this.getSchema();
 
@@ -289,7 +292,9 @@ export class IndexerSyncService {
         where: { transactionHash: In(txHashes) },
         select: ['transactionHash'],
       });
-      const existingTxSet = new Set(existingVotes.map((v) => v.transactionHash));
+      const existingTxSet = new Set(
+        existingVotes.map((v) => v.transactionHash),
+      );
 
       // Preload user and brand caches
       const fids = [...new Set(indexerVotes.map((v: any) => v.fid))];
@@ -335,7 +340,9 @@ export class IndexerSyncService {
             }
 
             // Check if all brands exist
-            const missingBrands = brandIdsArray.filter((id) => !brandIds.has(id));
+            const missingBrands = brandIdsArray.filter(
+              (id) => !brandIds.has(id),
+            );
             if (missingBrands.length > 0) {
               this.logger.warn(
                 `Vote ${txHash} has missing brands: ${missingBrands.join(', ')}, skipping`,
@@ -398,9 +405,13 @@ export class IndexerSyncService {
             // Add 3 points for the vote to user's points and totalS2Points
             try {
               await this.userService.addPoints(userId, 3);
-              this.logger.debug(`Added 3 points for synced vote to user ${userId}`);
+              this.logger.debug(
+                `Added 3 points for synced vote to user ${userId}`,
+              );
             } catch (pointsError) {
-              this.logger.warn(`Failed to add points for vote ${txHash}: ${pointsError}`);
+              this.logger.warn(
+                `Failed to add points for vote ${txHash}: ${pointsError}`,
+              );
             }
           } catch (error) {
             const errorMessage =
@@ -432,7 +443,10 @@ export class IndexerSyncService {
   /**
    * Sync brands from indexer to MySQL
    */
-  private async syncBrands(stats: SyncStats, windowHours: number): Promise<void> {
+  private async syncBrands(
+    stats: SyncStats,
+    windowHours: number,
+  ): Promise<void> {
     this.logger.log('Syncing brands...');
     const schema = this.getSchema();
 
@@ -467,7 +481,9 @@ export class IndexerSyncService {
       const result = await this.indexerClient!.query(query);
       const indexerBrands = result.rows;
 
-      this.logger.log(`Found ${indexerBrands.length} brands to check in indexer`);
+      this.logger.log(
+        `Found ${indexerBrands.length} brands to check in indexer`,
+      );
       stats.brandsChecked = indexerBrands.length;
 
       if (indexerBrands.length === 0) {
@@ -479,7 +495,14 @@ export class IndexerSyncService {
       const onChainIds = indexerBrands.map((b: any) => b.id);
       const existingBrands = await this.brandRepository.find({
         where: { onChainId: In(onChainIds) },
-        select: ['id', 'onChainId', 'metadataHash'],
+        select: [
+          'id',
+          'onChainId',
+          'metadataHash',
+          'contractAddress',
+          'ticker',
+          'tickerTokenId',
+        ],
       });
       const existingBrandMap = new Map(
         existingBrands.map((b) => [b.onChainId, b]),
@@ -519,14 +542,33 @@ export class IndexerSyncService {
               // Fetch new metadata from IPFS
               let metadata: any = {};
               try {
-                metadata = await this.blockchainService.fetchMetadataFromIpfs(
-                  metadataHash,
-                );
+                metadata =
+                  await this.blockchainService.fetchMetadataFromIpfs(
+                    metadataHash,
+                  );
               } catch (ipfsError) {
                 this.logger.warn(
                   `Failed to fetch IPFS metadata for brand ${onChainId}: ${ipfsError}`,
                 );
               }
+
+              const metadataContractAddress =
+                metadata.contractAddress ?? metadata.tokenContractAddress;
+              const metadataTicker = metadata.ticker ?? metadata.tokenTicker;
+              const metadataTickerTokenId =
+                typeof metadata.tickerTokenId === 'string'
+                  ? metadata.tickerTokenId
+                  : undefined;
+              const nextContractAddress =
+                metadataContractAddress ?? existingBrand.contractAddress ?? '';
+              const nextTicker = metadataTicker ?? existingBrand.ticker ?? '';
+              const tokenSignalDetected = Boolean(
+                metadataContractAddress || metadataTicker || metadataTickerTokenId,
+              );
+
+              this.logger.log(
+                `Brand ${onChainId} metadata token signal: contract=${Boolean(metadataContractAddress)} ticker=${Boolean(metadataTicker)} tickerTokenId=${Boolean(metadataTickerTokenId)}`,
+              );
 
               // Update the brand
               await this.brandRepository.update(
@@ -536,16 +578,36 @@ export class IndexerSyncService {
                   onChainHandle: indexerBrand.handle,
                   onChainFid: indexerBrand.fid,
                   onChainWalletAddress: indexerBrand.wallet_address,
-                  totalBrndAwarded: indexerBrand.total_brnd_awarded?.toString() || '0',
+                  totalBrndAwarded:
+                    indexerBrand.total_brnd_awarded?.toString() || '0',
                   availableBrnd: indexerBrand.available_brnd?.toString() || '0',
                   ...(metadata.name && { name: metadata.name }),
-                  ...(metadata.description && { description: metadata.description }),
+                  ...(metadata.description && {
+                    description: metadata.description,
+                  }),
                   ...(metadata.imageUrl && { imageUrl: metadata.imageUrl }),
                   ...(metadata.url && { url: metadata.url }),
                   ...(metadata.profile && { profile: metadata.profile }),
                   ...(metadata.channel && { channel: metadata.channel }),
+                  contractAddress: nextContractAddress,
+                  ticker: nextTicker,
+                  ...(metadataTickerTokenId !== undefined && {
+                    tickerTokenId: metadataTickerTokenId,
+                  }),
                 },
               );
+
+              if (
+                tokenSignalDetected &&
+                !nextContractAddress &&
+                !nextTicker &&
+                metadataTickerTokenId === undefined
+              ) {
+                this.logger.warn(
+                  `Brand ${onChainId} token signal detected but token fields remained empty after sync update`,
+                );
+              }
+
               stats.brandsUpdated++;
             }
             continue;
@@ -560,12 +622,12 @@ export class IndexerSyncService {
           let metadata: any = {};
           if (metadataHash) {
             try {
-              metadata = await this.blockchainService.fetchMetadataFromIpfs(
-                metadataHash,
-              );
+              metadata =
+                await this.blockchainService.fetchMetadataFromIpfs(
+                  metadataHash,
+                );
               this.logger.log(
-                `Fetched IPFS metadata for brand ${onChainId}:`,
-                metadata,
+                `Fetched IPFS metadata for brand ${onChainId}`,
               );
             } catch (ipfsError) {
               this.logger.warn(
@@ -574,8 +636,20 @@ export class IndexerSyncService {
             }
           }
 
+          const metadataContractAddress =
+            metadata.contractAddress ?? metadata.tokenContractAddress;
+          const metadataTicker = metadata.ticker ?? metadata.tokenTicker;
+          const metadataTickerTokenId =
+            typeof metadata.tickerTokenId === 'string'
+              ? metadata.tickerTokenId
+              : undefined;
+
+          this.logger.log(
+            `Creating brand ${onChainId} token signal: contract=${Boolean(metadataContractAddress)} ticker=${Boolean(metadataTicker)} tickerTokenId=${Boolean(metadataTickerTokenId)}`,
+          );
+
           // Determine profile/channel from metadata or handle
-          let profile = metadata.profile || '';
+          const profile = metadata.profile || '';
           let channel = metadata.channel || '';
           let queryType = metadata.queryType ?? 0;
 
@@ -607,6 +681,11 @@ export class IndexerSyncService {
             profile,
             channel,
             queryType,
+            contractAddress: metadataContractAddress || '',
+            ticker: metadataTicker || '',
+            ...(metadataTickerTokenId !== undefined && {
+              tickerTokenId: metadataTickerTokenId,
+            }),
             followerCount: metadata.followerCount || 0,
             category: defaultCategory,
 
@@ -627,7 +706,8 @@ export class IndexerSyncService {
             currentRanking: 0,
 
             // Blockchain amounts
-            totalBrndAwarded: indexerBrand.total_brnd_awarded?.toString() || '0',
+            totalBrndAwarded:
+              indexerBrand.total_brnd_awarded?.toString() || '0',
             availableBrnd: indexerBrand.available_brnd?.toString() || '0',
           });
 
@@ -643,10 +723,7 @@ export class IndexerSyncService {
           stats.errors.push(
             `Brand ${indexerBrand.id} (${indexerBrand.handle}): ${errorMessage}`,
           );
-          this.logger.error(
-            `Error syncing brand ${indexerBrand.id}:`,
-            error,
-          );
+          this.logger.error(`Error syncing brand ${indexerBrand.id}:`, error);
         }
       }
 

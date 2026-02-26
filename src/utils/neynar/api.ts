@@ -52,8 +52,6 @@ export class NeynarAPI {
       });
     }
 
-    console.log('THE NEYNAR API KEY', this.apiKey);
-
     const response = await fetch(url.toString(), {
       headers: {
         accept: 'application/json',
