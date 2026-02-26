@@ -1,5 +1,10 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import {
+  AdminGuard,
+  DebugEndpointGuard,
+  WebhookApiKeyGuard,
+} from '../../security/guards';
 
 import { BlockchainController } from './blockchain.controller';
 import { BlockchainService } from './services/blockchain.service';
@@ -67,6 +72,9 @@ import {
     UserService,
     AdminService,
     IpfsService,
+    AdminGuard,
+    DebugEndpointGuard,
+    WebhookApiKeyGuard,
   ],
   exports: [
     BlockchainService,

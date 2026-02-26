@@ -22,6 +22,9 @@ import {
   AuthorizationGuard,
   QuickAuthPayload,
   IndexerGuard,
+  WebhookApiKeyGuard,
+  AdminGuard,
+  DebugEndpointGuard,
 } from '../../security/guards';
 import { Session } from '../../security/decorators';
 
@@ -445,6 +448,7 @@ export class BlockchainController {
   }
 
   @Post('/webhooks/farcaster/cast-created')
+  @UseGuards(WebhookApiKeyGuard)
   async handleCastWebhook(@Body() payload: any) {
     try {
       logger.log(`📱 [WEBHOOK] Received cast webhook`);
@@ -1015,6 +1019,7 @@ async claimPodiumSignature(
    * Returns the image as PNG or uploads to IPFS based on query param
    */
   @Get('/podium/test-nft-image')
+  @UseGuards(AdminGuard, DebugEndpointGuard)
   async testNFTImageGeneration() {
     try {
       logger.log(`🧪 [TEST] Generating test NFT image`);
@@ -1069,6 +1074,7 @@ async claimPodiumSignature(
    * View directly in browser: /blockchain-service/podium/test-nft-image/preview
    */
   @Get('/podium/test-nft-image/preview')
+  @UseGuards(AdminGuard, DebugEndpointGuard)
   async testNFTImagePreview(@Param() params: any, @Body() body: any) {
     try {
       logger.log(`🧪 [TEST] Generating preview NFT image`);
