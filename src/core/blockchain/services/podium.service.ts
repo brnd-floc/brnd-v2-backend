@@ -12,7 +12,12 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 
-import { Brand, CollectibleActivity, User, UserBrandVotes } from '../../../models';
+import {
+  Brand,
+  CollectibleActivity,
+  User,
+  UserBrandVotes,
+} from '../../../models';
 import { logger } from '../../../main';
 import { IpfsService } from 'src/utils/ipfs.service';
 
@@ -28,7 +33,794 @@ const ERC20_ABI = [
 ] as const;
 
 // Podium Contract ABI
-const PODIUM_CONTRACT_ABI = [{"inputs":[{"internalType":"address","name":"_brndToken","type":"address"},{"internalType":"address","name":"_season2","type":"address"},{"internalType":"address","name":"_backendSigner","type":"address"},{"internalType":"address","name":"_protocolFeeRecipient","type":"address"},{"internalType":"address","name":"_escrowWallet","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"AlreadyMinted","type":"error"},{"inputs":[],"name":"CannotBuyOwnPodium","type":"error"},{"inputs":[],"name":"ECDSAInvalidSignature","type":"error"},{"inputs":[{"internalType":"uint256","name":"length","type":"uint256"}],"name":"ECDSAInvalidSignatureLength","type":"error"},{"inputs":[{"internalType":"bytes32","name":"s","type":"bytes32"}],"name":"ECDSAInvalidSignatureS","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"address","name":"owner","type":"address"}],"name":"ERC721IncorrectOwner","type":"error"},{"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ERC721InsufficientApproval","type":"error"},{"inputs":[{"internalType":"address","name":"approver","type":"address"}],"name":"ERC721InvalidApprover","type":"error"},{"inputs":[{"internalType":"address","name":"operator","type":"address"}],"name":"ERC721InvalidOperator","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"ERC721InvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"ERC721InvalidReceiver","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"ERC721InvalidSender","type":"error"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ERC721NonexistentToken","type":"error"},{"inputs":[],"name":"EmptyMetadataURI","type":"error"},{"inputs":[],"name":"Expired","type":"error"},{"inputs":[],"name":"InsufficientBalance","type":"error"},{"inputs":[],"name":"InvalidFid","type":"error"},{"inputs":[],"name":"InvalidInput","type":"error"},{"inputs":[],"name":"NotMinted","type":"error"},{"inputs":[],"name":"NothingToClaim","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"inputs":[],"name":"TransferBlocked","type":"error"},{"inputs":[],"name":"Unauthorized","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"approved","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":false,"internalType":"bool","name":"approved","type":"bool"}],"name":"ApprovalForAll","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"oldSigner","type":"address"},{"indexed":true,"internalType":"address","name":"newSigner","type":"address"}],"name":"BackendSignerUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"oldURI","type":"string"},{"indexed":false,"internalType":"string","name":"newURI","type":"string"}],"name":"ContractURIUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"oldEscrow","type":"address"},{"indexed":true,"internalType":"address","name":"newEscrow","type":"address"}],"name":"EscrowWalletUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"ownerFid","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"FeesClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"fid","type":"uint256"},{"indexed":true,"internalType":"address","name":"newWallet","type":"address"}],"name":"FidWalletUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"newOwnerFid","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"previousOwnerFid","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"sellerProceeds","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"genesisRoyalty","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"protocolFee","type":"uint256"}],"name":"PodiumBought","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":true,"internalType":"bytes32","name":"arrangementHash","type":"bytes32"},{"indexed":true,"internalType":"uint256","name":"ownerFid","type":"uint256"},{"indexed":false,"internalType":"uint16[3]","name":"brandIds","type":"uint16[3]"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"},{"indexed":false,"internalType":"address","name":"wallet","type":"address"},{"indexed":false,"internalType":"string","name":"metadataURI","type":"string"}],"name":"PodiumMinted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"oldRecipient","type":"address"},{"indexed":true,"internalType":"address","name":"newRecipient","type":"address"}],"name":"ProtocolFeeRecipientUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[],"name":"BASE_PRICE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"BPS_DENOMINATOR","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"BRND_TOKEN","outputs":[{"internalType":"contract IBRND","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"GENESIS_ROYALTY_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MULTIPLIER_DENOMINATOR","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"PRICE_MULTIPLIER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"PROTOCOL_FEE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SEASON2","outputs":[{"internalType":"contract IBRNDSeason2","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"arrangementToTokenId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"backendSigner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"buyerFid","type":"uint256"}],"name":"buyPodium","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint16[3]","name":"brandIds","type":"uint16[3]"},{"internalType":"uint256","name":"fid","type":"uint256"},{"internalType":"string","name":"metadataURI","type":"string"},{"internalType":"uint256","name":"deadline","type":"uint256"},{"internalType":"bytes","name":"signature","type":"bytes"}],"name":"claimPodium","outputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"uint256","name":"feeAmount","type":"uint256"},{"internalType":"uint256","name":"deadline","type":"uint256"},{"internalType":"bytes","name":"signature","type":"bytes"}],"name":"claimRepeatFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"contractURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"escrowWallet","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"feeClaimNonces","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"fidNonces","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"fidWallet","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getApproved","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint16[3]","name":"brandIds","type":"uint16[3]"}],"name":"getArrangementHash","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"getDomainSeparator","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getFeeClaimNonce","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"fid","type":"uint256"}],"name":"getNonce","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getPodium","outputs":[{"components":[{"internalType":"uint16[3]","name":"brandIds","type":"uint16[3]"},{"internalType":"uint256","name":"genesisCreatorFid","type":"uint256"},{"internalType":"uint256","name":"ownerFid","type":"uint256"},{"internalType":"uint256","name":"claimCount","type":"uint256"},{"internalType":"uint256","name":"lastSalePrice","type":"uint256"},{"internalType":"uint256","name":"totalFeesEarned","type":"uint256"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct BRNDPodiumCollectables.PodiumData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getPriceByTokenId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"operator","type":"address"}],"name":"isApprovedForAll","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"podiumData","outputs":[{"internalType":"uint256","name":"genesisCreatorFid","type":"uint256"},{"internalType":"uint256","name":"ownerFid","type":"uint256"},{"internalType":"uint256","name":"claimCount","type":"uint256"},{"internalType":"uint256","name":"lastSalePrice","type":"uint256"},{"internalType":"uint256","name":"totalFeesEarned","type":"uint256"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"protocolFeeRecipient","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"bool","name":"approved","type":"bool"}],"name":"setApprovalForAll","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newSigner","type":"address"}],"name":"setBackendSigner","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"newContractURI","type":"string"}],"name":"setContractURI","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newEscrow","type":"address"}],"name":"setEscrowWallet","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newRecipient","type":"address"}],"name":"setProtocolFeeRecipient","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"interfaceId","type":"bytes4"}],"name":"supportsInterface","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalMinted","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}] as const;
+const PODIUM_CONTRACT_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: '_brndToken', type: 'address' },
+      { internalType: 'address', name: '_season2', type: 'address' },
+      { internalType: 'address', name: '_backendSigner', type: 'address' },
+      {
+        internalType: 'address',
+        name: '_protocolFeeRecipient',
+        type: 'address',
+      },
+      { internalType: 'address', name: '_escrowWallet', type: 'address' },
+    ],
+    stateMutability: 'nonpayable',
+    type: 'constructor',
+  },
+  { inputs: [], name: 'AlreadyMinted', type: 'error' },
+  { inputs: [], name: 'CannotBuyOwnPodium', type: 'error' },
+  { inputs: [], name: 'ECDSAInvalidSignature', type: 'error' },
+  {
+    inputs: [{ internalType: 'uint256', name: 'length', type: 'uint256' }],
+    name: 'ECDSAInvalidSignatureLength',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'bytes32', name: 's', type: 'bytes32' }],
+    name: 'ECDSAInvalidSignatureS',
+    type: 'error',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'sender', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+      { internalType: 'address', name: 'owner', type: 'address' },
+    ],
+    name: 'ERC721IncorrectOwner',
+    type: 'error',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'operator', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+    ],
+    name: 'ERC721InsufficientApproval',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'approver', type: 'address' }],
+    name: 'ERC721InvalidApprover',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'operator', type: 'address' }],
+    name: 'ERC721InvalidOperator',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+    name: 'ERC721InvalidOwner',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'receiver', type: 'address' }],
+    name: 'ERC721InvalidReceiver',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'sender', type: 'address' }],
+    name: 'ERC721InvalidSender',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'ERC721NonexistentToken',
+    type: 'error',
+  },
+  { inputs: [], name: 'EmptyMetadataURI', type: 'error' },
+  { inputs: [], name: 'Expired', type: 'error' },
+  { inputs: [], name: 'InsufficientBalance', type: 'error' },
+  { inputs: [], name: 'InvalidFid', type: 'error' },
+  { inputs: [], name: 'InvalidInput', type: 'error' },
+  { inputs: [], name: 'NotMinted', type: 'error' },
+  { inputs: [], name: 'NothingToClaim', type: 'error' },
+  {
+    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+    name: 'OwnableInvalidOwner',
+    type: 'error',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'OwnableUnauthorizedAccount',
+    type: 'error',
+  },
+  { inputs: [], name: 'ReentrancyGuardReentrantCall', type: 'error' },
+  { inputs: [], name: 'TransferBlocked', type: 'error' },
+  { inputs: [], name: 'Unauthorized', type: 'error' },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'owner',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'approved',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+    ],
+    name: 'Approval',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'owner',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'operator',
+        type: 'address',
+      },
+      { indexed: false, internalType: 'bool', name: 'approved', type: 'bool' },
+    ],
+    name: 'ApprovalForAll',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'oldSigner',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'newSigner',
+        type: 'address',
+      },
+    ],
+    name: 'BackendSignerUpdated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: false,
+        internalType: 'string',
+        name: 'oldURI',
+        type: 'string',
+      },
+      {
+        indexed: false,
+        internalType: 'string',
+        name: 'newURI',
+        type: 'string',
+      },
+    ],
+    name: 'ContractURIUpdated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'oldEscrow',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'newEscrow',
+        type: 'address',
+      },
+    ],
+    name: 'EscrowWalletUpdated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'ownerFid',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'amount',
+        type: 'uint256',
+      },
+    ],
+    name: 'FeesClaimed',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'uint256', name: 'fid', type: 'uint256' },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'newWallet',
+        type: 'address',
+      },
+    ],
+    name: 'FidWalletUpdated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'previousOwner',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'newOwner',
+        type: 'address',
+      },
+    ],
+    name: 'OwnershipTransferred',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'newOwnerFid',
+        type: 'uint256',
+      },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'previousOwnerFid',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'price',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'sellerProceeds',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'genesisRoyalty',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'protocolFee',
+        type: 'uint256',
+      },
+    ],
+    name: 'PodiumBought',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+      {
+        indexed: true,
+        internalType: 'bytes32',
+        name: 'arrangementHash',
+        type: 'bytes32',
+      },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'ownerFid',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'uint16[3]',
+        name: 'brandIds',
+        type: 'uint16[3]',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'price',
+        type: 'uint256',
+      },
+      {
+        indexed: false,
+        internalType: 'address',
+        name: 'wallet',
+        type: 'address',
+      },
+      {
+        indexed: false,
+        internalType: 'string',
+        name: 'metadataURI',
+        type: 'string',
+      },
+    ],
+    name: 'PodiumMinted',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'oldRecipient',
+        type: 'address',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'newRecipient',
+        type: 'address',
+      },
+    ],
+    name: 'ProtocolFeeRecipientUpdated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'from', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'to', type: 'address' },
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+    ],
+    name: 'Transfer',
+    type: 'event',
+  },
+  {
+    inputs: [],
+    name: 'BASE_PRICE',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'BPS_DENOMINATOR',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'BRND_TOKEN',
+    outputs: [{ internalType: 'contract IBRND', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'GENESIS_ROYALTY_BPS',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'MULTIPLIER_DENOMINATOR',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'PRICE_MULTIPLIER',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'PROTOCOL_FEE_BPS',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'SEASON2',
+    outputs: [
+      { internalType: 'contract IBRNDSeason2', name: '', type: 'address' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
+    name: 'arrangementToTokenId',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'backendSigner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+      { internalType: 'uint256', name: 'buyerFid', type: 'uint256' },
+    ],
+    name: 'buyPodium',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
+      { internalType: 'uint256', name: 'fid', type: 'uint256' },
+      { internalType: 'string', name: 'metadataURI', type: 'string' },
+      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
+      { internalType: 'bytes', name: 'signature', type: 'bytes' },
+    ],
+    name: 'claimPodium',
+    outputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+      { internalType: 'uint256', name: 'feeAmount', type: 'uint256' },
+      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
+      { internalType: 'bytes', name: 'signature', type: 'bytes' },
+    ],
+    name: 'claimRepeatFees',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'contractURI',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'escrowWallet',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'feeClaimNonces',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'fidNonces',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'fidWallet',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'getApproved',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
+    ],
+    name: 'getArrangementHash',
+    outputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
+    stateMutability: 'pure',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'getDomainSeparator',
+    outputs: [{ internalType: 'bytes32', name: '', type: 'bytes32' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'getFeeClaimNonce',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'fid', type: 'uint256' }],
+    name: 'getNonce',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'getPodium',
+    outputs: [
+      {
+        components: [
+          { internalType: 'uint16[3]', name: 'brandIds', type: 'uint16[3]' },
+          {
+            internalType: 'uint256',
+            name: 'genesisCreatorFid',
+            type: 'uint256',
+          },
+          { internalType: 'uint256', name: 'ownerFid', type: 'uint256' },
+          { internalType: 'uint256', name: 'claimCount', type: 'uint256' },
+          { internalType: 'uint256', name: 'lastSalePrice', type: 'uint256' },
+          { internalType: 'uint256', name: 'totalFeesEarned', type: 'uint256' },
+          { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
+        ],
+        internalType: 'struct BRNDPodiumCollectables.PodiumData',
+        name: '',
+        type: 'tuple',
+      },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'getPriceByTokenId',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'operator', type: 'address' },
+    ],
+    name: 'isApprovedForAll',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'name',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'ownerOf',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    name: 'podiumData',
+    outputs: [
+      { internalType: 'uint256', name: 'genesisCreatorFid', type: 'uint256' },
+      { internalType: 'uint256', name: 'ownerFid', type: 'uint256' },
+      { internalType: 'uint256', name: 'claimCount', type: 'uint256' },
+      { internalType: 'uint256', name: 'lastSalePrice', type: 'uint256' },
+      { internalType: 'uint256', name: 'totalFeesEarned', type: 'uint256' },
+      { internalType: 'uint256', name: 'createdAt', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'protocolFeeRecipient',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'renounceOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'from', type: 'address' },
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+    ],
+    name: 'safeTransferFrom',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'from', type: 'address' },
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+      { internalType: 'bytes', name: 'data', type: 'bytes' },
+    ],
+    name: 'safeTransferFrom',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'operator', type: 'address' },
+      { internalType: 'bool', name: 'approved', type: 'bool' },
+    ],
+    name: 'setApprovalForAll',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'newSigner', type: 'address' }],
+    name: 'setBackendSigner',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'string', name: 'newContractURI', type: 'string' },
+    ],
+    name: 'setContractURI',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'newEscrow', type: 'address' }],
+    name: 'setEscrowWallet',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'newRecipient', type: 'address' },
+    ],
+    name: 'setProtocolFeeRecipient',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'bytes4', name: 'interfaceId', type: 'bytes4' }],
+    name: 'supportsInterface',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'symbol',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'tokenURI',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalMinted',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'from', type: 'address' },
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
+    ],
+    name: 'transferFrom',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'newOwner', type: 'address' }],
+    name: 'transferOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
 
 @Injectable()
 export class PodiumService implements OnModuleInit {
@@ -41,6 +833,18 @@ export class PodiumService implements OnModuleInit {
   private readonly BASE_PRICE = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly PRICE_INCREMENT = BigInt('1000000000000000000000000'); // 1,000,000 BRND in wei
   private readonly REPEAT_FEE_BPS = 1000; // 10%
+  private readonly imageGenerationTimeoutMs = this.parsePositiveIntEnv(
+    process.env.PODIUM_IMAGE_TIMEOUT_MS,
+    6000,
+  );
+  private readonly ipfsUploadTimeoutMs = this.parsePositiveIntEnv(
+    process.env.PODIUM_IPFS_TIMEOUT_MS,
+    8000,
+  );
+  private readonly ipfsUploadRetries = this.parsePositiveIntEnv(
+    process.env.PODIUM_IPFS_RETRIES,
+    1,
+  );
 
   private readonly publicClient;
 
@@ -70,7 +874,7 @@ export class PodiumService implements OnModuleInit {
     // Positions based on the NFT base layer image (1200x1200)
     nftInfo: {
       x: 1460, // Right-aligned
-      y: 67,   // Top area
+      y: 67, // Top area
     },
     // Brand slots on podium [rank2-left, rank1-center, rank3-right]
     slots: [
@@ -102,6 +906,39 @@ export class PodiumService implements OnModuleInit {
     });
   }
 
+  private parsePositiveIntEnv(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
+    const parsed = Number.parseInt(rawValue ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    operation: string,
+  ): Promise<T> {
+    return await new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      promise
+        .then((result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+    });
+  }
+
   onModuleInit() {
     try {
       const fontPath = path.join(
@@ -112,7 +949,9 @@ export class PodiumService implements OnModuleInit {
       );
       if (fs.existsSync(fontPath)) {
         GlobalFonts.registerFromPath(fontPath, 'Geist-Bold');
-        this.serviceLogger.log('Custom font Geist-Bold registered successfully.');
+        this.serviceLogger.log(
+          'Custom font Geist-Bold registered successfully.',
+        );
       } else {
         this.serviceLogger.warn(`Custom font not found at ${fontPath}.`);
       }
@@ -221,7 +1060,11 @@ export class PodiumService implements OnModuleInit {
     });
 
     // Update by brand combination (catches ALL votes including ones without tokenId)
-    if (referenceVote?.brand1?.id && referenceVote?.brand2?.id && referenceVote?.brand3?.id) {
+    if (
+      referenceVote?.brand1?.id &&
+      referenceVote?.brand2?.id &&
+      referenceVote?.brand3?.id
+    ) {
       const result = await this.userBrandVotesRepository
         .createQueryBuilder()
         .update(UserBrandVotes)
@@ -666,9 +1509,11 @@ export class PodiumService implements OnModuleInit {
   /**
    * Get brand names for the given brand IDs
    */
-  async getBrandNames(brandIds: [number, number, number]): Promise<[string, string, string]> {
+  async getBrandNames(
+    brandIds: [number, number, number],
+  ): Promise<[string, string, string]> {
     const brands = await this.brandRepository.findByIds(brandIds);
-    const brandMap = new Map(brands.map(b => [b.id, b.name]));
+    const brandMap = new Map(brands.map((b) => [b.id, b.name]));
     return [
       brandMap.get(brandIds[0]) || 'Unknown',
       brandMap.get(brandIds[1]) || 'Unknown',
@@ -682,7 +1527,9 @@ export class PodiumService implements OnModuleInit {
   async getBrandsForNFT(brandIds: [number, number, number]): Promise<Brand[]> {
     const brands = await this.brandRepository.findByIds(brandIds);
     // Sort to match the order of brandIds
-    return brandIds.map(id => brands.find(b => b.id === id)).filter(Boolean) as Brand[];
+    return brandIds
+      .map((id) => brands.find((b) => b.id === id))
+      .filter(Boolean) as Brand[];
   }
 
   /**
@@ -710,11 +1557,17 @@ export class PodiumService implements OnModuleInit {
     if (this.nftBaseLayerCache) return this.nftBaseLayerCache;
 
     if (!fs.existsSync(this.nftBaseLayerPath)) {
-      throw new Error(`NFT base layer image not found at: ${this.nftBaseLayerPath}`);
+      throw new Error(
+        `NFT base layer image not found at: ${this.nftBaseLayerPath}`,
+      );
     }
 
     const image = await loadImage(this.nftBaseLayerPath);
-    this.nftBaseLayerCache = { image, width: image.width, height: image.height };
+    this.nftBaseLayerCache = {
+      image,
+      width: image.width,
+      height: image.height,
+    };
 
     this.serviceLogger.log(
       `NFT base layer loaded: ${image.width}x${image.height}`,
@@ -726,8 +1579,12 @@ export class PodiumService implements OnModuleInit {
   /**
    * Generate the NFT podium image
    */
-  async generatePodiumNFTImage(brandIds: [number, number, number]): Promise<Buffer> {
-    this.serviceLogger.log(`🎨 Generating NFT image for brands: [${brandIds.join(', ')}]`);
+  async generatePodiumNFTImage(
+    brandIds: [number, number, number],
+  ): Promise<Buffer> {
+    this.serviceLogger.log(
+      `🎨 Generating NFT image for brands: [${brandIds.join(', ')}]`,
+    );
 
     try {
       // Load base layer
@@ -738,9 +1595,6 @@ export class PodiumService implements OnModuleInit {
       if (brands.length !== 3) {
         throw new Error('Could not find all 3 brands');
       }
-
-      // Get next token ID from contract
-      const nextTokenId = await this.getNextTokenId();
 
       // Create canvas
       const canvas = createCanvas(width, height);
@@ -753,8 +1607,8 @@ export class PodiumService implements OnModuleInit {
       // Draw base layer
       ctx.drawImage(baseImage, 0, 0, width, height);
 
-      // Draw NFT info in top right (NFT #{tokenId} and brand IDs)
-      await this.drawNFTInfo(ctx, nextTokenId, brandIds);
+      // Draw NFT info in top right with a neutral label to avoid token race mismatch.
+      await this.drawNFTInfo(ctx, 'PENDING', brandIds);
 
       // Draw brand images on podium slots
       // brands[0] = 1st place (gold), brands[1] = 2nd place (silver), brands[2] = 3rd place (bronze)
@@ -780,7 +1634,7 @@ export class PodiumService implements OnModuleInit {
    */
   private async drawNFTInfo(
     ctx: CanvasRenderingContext2D,
-    tokenId: number,
+    tokenLabel: string,
     brandIds: [number, number, number],
   ) {
     const { nftInfo, colors, fonts } = this.CONFIG;
@@ -788,15 +1642,19 @@ export class PodiumService implements OnModuleInit {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
 
-    // Draw "NFT #X"
+    // Draw token label (final token ID is only known once mint is executed on-chain).
     ctx.font = `bold 27px ${fonts.primary}, ${fonts.fallback}`;
     ctx.fillStyle = colors.textWhite;
-    ctx.fillText(`#${tokenId}`, nftInfo.x, nftInfo.y);
+    ctx.fillText(`#${tokenLabel}`, nftInfo.x, nftInfo.y);
 
     // Draw brand IDs below (e.g., "34-55-201")
     ctx.font = `27px ${fonts.primary}, ${fonts.fallback}`;
     ctx.fillStyle = colors.textWhite;
-    ctx.fillText(`${brandIds[0]}-${brandIds[1]}-${brandIds[2]}`, nftInfo.x, nftInfo.y + 32);
+    ctx.fillText(
+      `${brandIds[0]}-${brandIds[1]}-${brandIds[2]}`,
+      nftInfo.x,
+      nftInfo.y + 32,
+    );
   }
 
   /**
@@ -814,10 +1672,20 @@ export class PodiumService implements OnModuleInit {
 
     try {
       if (brand.imageUrl) {
-        await this.drawRoundedImage(ctx, brand.imageUrl, x, slot.y, slot.size, 30);
+        await this.drawRoundedImage(
+          ctx,
+          brand.imageUrl,
+          x,
+          slot.y,
+          slot.size,
+          30,
+        );
       }
     } catch (error) {
-      this.serviceLogger.warn(`Failed to load brand image for ${brand.name}:`, error as any);
+      this.serviceLogger.warn(
+        `Failed to load brand image for ${brand.name}:`,
+        error as any,
+      );
       // Draw placeholder if image fails
       ctx.fillStyle = '#333333';
       ctx.beginPath();
@@ -877,7 +1745,10 @@ export class PodiumService implements OnModuleInit {
       (ctx as any).drawImage(img, x, y, size, size);
       ctx.restore();
     } catch (error) {
-      this.serviceLogger.warn(`Failed to load image from ${url}:`, error as any);
+      this.serviceLogger.warn(
+        `Failed to load image from ${url}:`,
+        error as any,
+      );
       throw error;
     }
   }
@@ -886,18 +1757,50 @@ export class PodiumService implements OnModuleInit {
    * Generate NFT image and upload to IPFS
    * Returns the IPFS URI (ipfs://...)
    */
-  async generateAndUploadPodiumImage(brandIds: [number, number, number]): Promise<string> {
-    this.serviceLogger.log(`🚀 Generating and uploading NFT image for brands: [${brandIds.join(', ')}]`);
+  async generateAndUploadPodiumImage(
+    brandIds: [number, number, number],
+  ): Promise<string> {
+    this.serviceLogger.log(
+      `🚀 Generating and uploading NFT image for brands: [${brandIds.join(', ')}]`,
+    );
 
     // Generate the image
-    const imageBuffer = await this.generatePodiumNFTImage(brandIds);
+    const imageBuffer = await this.withTimeout(
+      this.generatePodiumNFTImage(brandIds),
+      this.imageGenerationTimeoutMs,
+      'Podium image generation',
+    );
 
     // Upload to IPFS
     const fileName = `podium_${brandIds.join('_')}_${Date.now()}.png`;
-    const imageUri = await this.ipfsService.uploadFileToIpfs(imageBuffer, fileName, 'image/png');
+    let attempt = 0;
+    let lastError: Error | null = null;
+    const totalAttempts = this.ipfsUploadRetries + 1;
 
-    this.serviceLogger.log(`✅ NFT image uploaded to IPFS: ${imageUri}`);
-    return imageUri;
+    while (attempt < totalAttempts) {
+      try {
+        const imageUri = await this.withTimeout(
+          this.ipfsService.uploadFileToIpfs(imageBuffer, fileName, 'image/png'),
+          this.ipfsUploadTimeoutMs,
+          `Podium image upload (attempt ${attempt + 1}/${totalAttempts})`,
+        );
+        this.serviceLogger.log(`✅ NFT image uploaded to IPFS: ${imageUri}`);
+        return imageUri;
+      } catch (error) {
+        lastError = error as Error;
+        attempt += 1;
+        if (attempt >= totalAttempts) {
+          break;
+        }
+        this.serviceLogger.warn(
+          `Podium image upload attempt ${attempt}/${totalAttempts} failed: ${lastError.message}`,
+        );
+      }
+    }
+
+    throw new Error(
+      `Failed to upload podium image to IPFS after ${totalAttempts} attempts: ${lastError?.message || 'unknown error'}`,
+    );
   }
 
   /**
@@ -921,7 +1824,8 @@ export class PodiumService implements OnModuleInit {
       throw new Error('No votes found to generate test image');
     }
 
-    const randomVote = recentVotes[Math.floor(Math.random() * recentVotes.length)];
+    const randomVote =
+      recentVotes[Math.floor(Math.random() * recentVotes.length)];
     const brandIds: [number, number, number] = [
       randomVote.brand1.id,
       randomVote.brand2.id,

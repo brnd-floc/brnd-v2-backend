@@ -2,9 +2,9 @@ import {
   Body,
   Controller,
   Get,
-  Logger,
   Param,
   Post,
+  Req,
   UseGuards,
   StreamableFile,
 } from '@nestjs/common';
@@ -32,8 +32,11 @@ import { HttpStatus, IpfsService } from '../../utils';
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   InternalServerErrorException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { Request } from 'express';
 
 import { logger } from '../../main';
 import {
@@ -53,6 +56,43 @@ import { AdminService } from '../admin/services/admin.service';
 @ApiTags('blockchain-service')
 @Controller('blockchain-service')
 export class BlockchainController {
+  private readonly podiumMetadataTimeoutMs = this.parsePositiveIntEnv(
+    process.env.PODIUM_IPFS_TIMEOUT_MS,
+    8000,
+  );
+  private readonly podiumIpfsRetries = this.parsePositiveIntEnv(
+    process.env.PODIUM_IPFS_RETRIES,
+    1,
+  );
+  private readonly podiumClaimRateLimitEnabled = this.parseBooleanEnv(
+    process.env.PODIUM_CLAIM_RATE_LIMIT_ENABLED,
+    true,
+  );
+  private readonly podiumClaimRateLimitWindowMs = this.parsePositiveIntEnv(
+    process.env.PODIUM_CLAIM_RATE_LIMIT_WINDOW_MS,
+    60000,
+  );
+  private readonly podiumClaimRateLimitMaxPerFid = this.parsePositiveIntEnv(
+    process.env.PODIUM_CLAIM_RATE_LIMIT_MAX_PER_FID,
+    6,
+  );
+  private readonly podiumClaimRateLimitMaxPerIp = this.parsePositiveIntEnv(
+    process.env.PODIUM_CLAIM_RATE_LIMIT_MAX_PER_IP,
+    20,
+  );
+  private readonly podiumClaimRateLimitBlockMs = this.parsePositiveIntEnv(
+    process.env.PODIUM_CLAIM_RATE_LIMIT_BLOCK_MS,
+    120000,
+  );
+  private readonly podiumClaimFidBuckets = new Map<
+    number,
+    { timestamps: number[]; blockUntil: number }
+  >();
+  private readonly podiumClaimIpBuckets = new Map<
+    string,
+    { timestamps: number[]; blockUntil: number }
+  >();
+
   constructor(
     private readonly blockchainService: BlockchainService,
     private readonly powerLevelService: PowerLevelService,
@@ -64,6 +104,182 @@ export class BlockchainController {
     private readonly podiumService: PodiumService,
     private readonly ipfsService: IpfsService,
   ) {}
+
+  private parsePositiveIntEnv(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
+    const parsed = Number.parseInt(rawValue ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  private parseBooleanEnv(rawValue: string | undefined, fallback: boolean) {
+    if (rawValue === undefined) {
+      return fallback;
+    }
+
+    const normalized = rawValue.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+
+    return fallback;
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    operation: string,
+  ): Promise<T> {
+    return await new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      promise
+        .then((result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+    });
+  }
+
+  private async uploadPodiumMetadataWithRetry(metadata: {
+    name: string;
+    description: string;
+    image: string;
+    attributes: Array<{ trait_type: string; value: string }>;
+  }): Promise<string> {
+    const totalAttempts = this.podiumIpfsRetries + 1;
+    let attempt = 0;
+    let lastError: Error | null = null;
+
+    while (attempt < totalAttempts) {
+      try {
+        return await this.withTimeout(
+          this.ipfsService.uploadJsonToIpfs(metadata),
+          this.podiumMetadataTimeoutMs,
+          `Podium metadata upload (attempt ${attempt + 1}/${totalAttempts})`,
+        );
+      } catch (error) {
+        lastError = error as Error;
+        attempt += 1;
+        if (attempt >= totalAttempts) {
+          break;
+        }
+        logger.warn(
+          `Podium metadata upload attempt ${attempt}/${totalAttempts} failed: ${lastError.message}`,
+        );
+      }
+    }
+
+    throw new Error(
+      `Podium metadata upload failed after ${totalAttempts} attempts: ${lastError?.message || 'unknown error'}`,
+    );
+  }
+
+  private resolveClientIp(request: Request): string {
+    const xForwardedFor = request?.headers?.['x-forwarded-for'];
+    const forwarded = Array.isArray(xForwardedFor)
+      ? xForwardedFor[0]
+      : xForwardedFor;
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      return forwarded.split(',')[0].trim();
+    }
+    if (request?.ip) {
+      return request.ip;
+    }
+    return 'unknown';
+  }
+
+  private applyPodiumClaimRateLimit<TKey extends string | number>(
+    bucketMap: Map<TKey, { timestamps: number[]; blockUntil: number }>,
+    key: TKey,
+    maxPerWindow: number,
+    nowMs: number,
+    fid: number,
+    ip: string,
+    scope: 'fid' | 'ip',
+  ) {
+    const bucket = bucketMap.get(key) ?? { timestamps: [], blockUntil: 0 };
+
+    if (bucket.blockUntil > nowMs) {
+      const retryAfterMs = bucket.blockUntil - nowMs;
+      logger.warn(
+        `[PODIUM] Rate limited by ${scope}. fid=${fid} ip=${ip} retryAfterMs=${retryAfterMs}`,
+      );
+      throw new HttpException(
+        {
+          error: 'RATE_LIMITED',
+          message: 'Too many podium claim requests. Please retry shortly.',
+          retryAfterMs,
+        },
+        429,
+      );
+    }
+
+    bucket.timestamps = bucket.timestamps.filter(
+      (ts) => nowMs - ts < this.podiumClaimRateLimitWindowMs,
+    );
+
+    if (bucket.timestamps.length >= maxPerWindow) {
+      bucket.blockUntil = nowMs + this.podiumClaimRateLimitBlockMs;
+      bucket.timestamps = [];
+      bucketMap.set(key, bucket);
+
+      const retryAfterMs = bucket.blockUntil - nowMs;
+      logger.warn(
+        `[PODIUM] Rate limited by ${scope}. fid=${fid} ip=${ip} retryAfterMs=${retryAfterMs}`,
+      );
+      throw new HttpException(
+        {
+          error: 'RATE_LIMITED',
+          message: 'Too many podium claim requests. Please retry shortly.',
+          retryAfterMs,
+        },
+        429,
+      );
+    }
+
+    bucket.timestamps.push(nowMs);
+    bucketMap.set(key, bucket);
+  }
+
+  private checkPodiumClaimRateLimitHook(fid: number, ip: string): void {
+    if (!this.podiumClaimRateLimitEnabled) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    this.applyPodiumClaimRateLimit(
+      this.podiumClaimFidBuckets,
+      fid,
+      this.podiumClaimRateLimitMaxPerFid,
+      nowMs,
+      fid,
+      ip,
+      'fid',
+    );
+    this.applyPodiumClaimRateLimit(
+      this.podiumClaimIpBuckets,
+      ip,
+      this.podiumClaimRateLimitMaxPerIp,
+      nowMs,
+      fid,
+      ip,
+      'ip',
+    );
+  }
 
   @Post('/authorize-wallet')
   @UseGuards(AuthorizationGuard)
@@ -90,8 +306,6 @@ export class BlockchainController {
           walletAddress,
           deadline,
         );
-
-      Logger.log('THE AUTH DATA IS', authData, walletAddress, session.sub);
 
       return {
         authData,
@@ -713,112 +927,130 @@ export class BlockchainController {
    * Generates an EIP-712 signature authorizing a user to claim (mint) a new podium NFT
    */
   @Post('/podium/claim-signature')
-@UseGuards(AuthorizationGuard)
-async claimPodiumSignature(
-  @Session() session: QuickAuthPayload,
-  @Body() body: ClaimPodiumSignatureDto,
-) {
-  try {
-    logger.log(
-      `🏆 [PODIUM] Claim signature request for FID: ${session.sub}, Brands: [${body.brandIds.join(', ')}]`,
-    );
-
-    const { walletAddress, brandIds, deadline } = body;
-
-    // Validate deadline
-    const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
-    if (deadline > maxDeadline) {
-      throw new BadRequestException(
-        'Deadline cannot be more than 24 hours in the future',
-      );
-    }
-
-    // Check eligibility
-    const eligibility = await this.podiumService.checkClaimEligibility(
-      session.sub,
-      brandIds,
-    );
-
-    if (!eligibility.eligible) {
-      throw new ForbiddenException({
-        error: 'NOT_ELIGIBLE',
-        message: eligibility.reason || 'User not eligible to claim this podium',
-      });
-    }
-
-    // Check BRND balance before generating signature
-    const balanceCheck = await this.podiumService.checkBrndBalance(walletAddress);
-    if (!balanceCheck.sufficient) {
-      const balanceBrnd = Number(balanceCheck.balanceWei / BigInt(1e18));
-      const requiredBrnd = Number(balanceCheck.requiredWei / BigInt(1e18));
+  @UseGuards(AuthorizationGuard)
+  async claimPodiumSignature(
+    @Session() session: QuickAuthPayload,
+    @Body() body: ClaimPodiumSignatureDto,
+    @Req() request: Request,
+  ) {
+    try {
       logger.log(
-        `🚫 [PODIUM] Insufficient BRND balance for FID: ${session.sub}. Has: ${balanceBrnd}, needs: ${requiredBrnd}`,
+        `🏆 [PODIUM] Claim signature request for FID: ${session.sub}, Brands: [${body.brandIds.join(', ')}]`,
       );
-      throw new ForbiddenException({
-        error: 'INSUFFICIENT_BALANCE',
-        message: `Insufficient BRND balance. You need ${requiredBrnd.toLocaleString()} BRND but only have ${balanceBrnd.toLocaleString()} BRND.`,
-        balanceBrnd,
-        requiredBrnd,
-      });
+
+      const { walletAddress, brandIds, deadline } = body;
+      this.checkPodiumClaimRateLimitHook(
+        session.sub,
+        this.resolveClientIp(request),
+      );
+
+      // Validate deadline
+      const maxDeadline = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+      if (deadline > maxDeadline) {
+        throw new BadRequestException(
+          'Deadline cannot be more than 24 hours in the future',
+        );
+      }
+
+      // Check eligibility
+      const eligibility = await this.podiumService.checkClaimEligibility(
+        session.sub,
+        brandIds,
+      );
+
+      if (!eligibility.eligible) {
+        throw new ForbiddenException({
+          error: 'NOT_ELIGIBLE',
+          message:
+            eligibility.reason || 'User not eligible to claim this podium',
+        });
+      }
+
+      // Check BRND balance before generating signature
+      const balanceCheck =
+        await this.podiumService.checkBrndBalance(walletAddress);
+      if (!balanceCheck.sufficient) {
+        const balanceBrnd = Number(balanceCheck.balanceWei / BigInt(1e18));
+        const requiredBrnd = Number(balanceCheck.requiredWei / BigInt(1e18));
+        logger.log(
+          `🚫 [PODIUM] Insufficient BRND balance for FID: ${session.sub}. Has: ${balanceBrnd}, needs: ${requiredBrnd}`,
+        );
+        throw new ForbiddenException({
+          error: 'INSUFFICIENT_BALANCE',
+          message: `Insufficient BRND balance. You need ${requiredBrnd.toLocaleString()} BRND but only have ${balanceBrnd.toLocaleString()} BRND.`,
+          balanceBrnd,
+          requiredBrnd,
+        });
+      }
+
+      let metadataURI = '';
+      try {
+        // 1. Generate podium image and upload to IPFS
+        const imageURI =
+          await this.podiumService.generateAndUploadPodiumImage(brandIds);
+
+        // 2. Get brand names for metadata
+        const brandNames = await this.podiumService.getBrandNames(brandIds);
+
+        // 3. Create metadata JSON
+        const metadata = {
+          name: `BRND Podium`,
+          description:
+            'Brands are stories in motion. And the world runs on them.',
+          image: imageURI,
+          attributes: [
+            { trait_type: 'Gold', value: brandNames[0] },
+            { trait_type: 'Silver', value: brandNames[1] },
+            { trait_type: 'Bronze', value: brandNames[2] },
+            { trait_type: 'Minter FID', value: session.sub.toString() },
+          ],
+        };
+
+        // 4. Upload metadata to IPFS with timeout/retries
+        metadataURI = await this.uploadPodiumMetadataWithRetry(metadata);
+      } catch (error) {
+        logger.error('Failed to generate podium metadata assets:', error);
+        throw new ServiceUnavailableException({
+          error: 'PODIUM_METADATA_UNAVAILABLE',
+          message:
+            'Podium metadata is temporarily unavailable. Please retry shortly.',
+        });
+      }
+
+      // Generate signature (now includes metadataURI)
+      const signature =
+        await this.signatureService.generateClaimPodiumSignature(
+          session.sub,
+          walletAddress,
+          brandIds,
+          metadataURI, // ← NEW PARAM
+          deadline,
+        );
+
+      const BASE_PRICE = '1000000000000000000000000';
+
+      return {
+        signature,
+        price: BASE_PRICE,
+        eligible: true,
+        reason: null,
+        metadataURI, // ← NEW RESPONSE FIELD
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException ||
+        error instanceof ServiceUnavailableException ||
+        error instanceof HttpException
+      ) {
+        throw error;
+      }
+      logger.error('Failed to generate claim podium signature:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Failed to generate claim podium signature',
+      );
     }
-
-    // ========== NEW: Generate metadata ==========
-    
-    // 1. Generate podium image and upload to IPFS
-    const imageURI = await this.podiumService.generateAndUploadPodiumImage(brandIds);
-    
-    // 2. Get brand names for metadata
-    const brandNames = await this.podiumService.getBrandNames(brandIds);
-    
-    // 3. Create metadata JSON
-    const metadata = {
-      name: `BRND Podium`,
-      description: 'Brands are stories in motion. And the world runs on them.',
-      image: imageURI,
-      attributes: [
-        { trait_type: 'Gold', value: brandNames[0] },
-        { trait_type: 'Silver', value: brandNames[1] },
-        { trait_type: 'Bronze', value: brandNames[2] },
-        { trait_type: 'Minter FID', value: session.sub.toString() },
-      ],
-    };
-    
-    // 4. Upload metadata to IPFS
-    const metadataURI = await this.ipfsService.uploadJsonToIpfs(metadata);
-    
-    // ========== END NEW ==========
-
-    // Generate signature (now includes metadataURI)
-    const signature = await this.signatureService.generateClaimPodiumSignature(
-      session.sub,
-      walletAddress,
-      brandIds,
-      metadataURI,  // ← NEW PARAM
-      deadline,
-    );
-
-    const BASE_PRICE = '1000000000000000000000000';
-
-    return {
-      signature,
-      price: BASE_PRICE,
-      eligible: true,
-      reason: null,
-      metadataURI,  // ← NEW RESPONSE FIELD
-    };
-  } catch (error) {
-    if (
-      error instanceof BadRequestException ||
-      error instanceof ForbiddenException
-    ) {
-      throw error;
-    }
-    logger.error('Failed to generate claim podium signature:', error);
-    throw new InternalServerErrorException(
-      error.message || 'Failed to generate claim podium signature',
-    );
   }
-}
 
   /**
    * Buy Podium Signature
@@ -1037,7 +1269,8 @@ async claimPodiumSignature(
       // Create test metadata
       const metadata = {
         name: `BRND Podium`,
-        description: 'Brands are stories in motion. And the world runs on them.',
+        description:
+          'Brands are stories in motion. And the world runs on them.',
         image: imageUri,
         attributes: [
           { trait_type: 'Gold', value: result.brandNames[0] },
@@ -1081,7 +1314,9 @@ async claimPodiumSignature(
 
       const result = await this.podiumService.generateTestNFTImage();
 
-      logger.log(`🧪 [TEST] Preview generated for brands: [${result.brandIds.join(', ')}] - ${result.brandNames.join(', ')}`);
+      logger.log(
+        `🧪 [TEST] Preview generated for brands: [${result.brandIds.join(', ')}] - ${result.brandNames.join(', ')}`,
+      );
 
       // Return raw PNG image that can be viewed in browser
       return new StreamableFile(result.buffer, {
