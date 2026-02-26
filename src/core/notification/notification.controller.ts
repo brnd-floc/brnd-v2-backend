@@ -8,11 +8,13 @@ import {
   HttpStatus,
   Res,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { hasResponse, hasError } from '../../utils';
 import { FarcasterNotificationService } from './services';
+import { WebhookApiKeyGuard } from '../../security/guards';
 
 @ApiTags('notification-service')
 @Controller('notification-service')
@@ -45,10 +47,11 @@ export class NotificationController {
   }
 
   /**
-   * Farcaster webhook endpoint for frame added/removed actions
-   * This endpoint receives notification tokens when users add/remove the frame
-   */
+  * Farcaster webhook endpoint for frame added/removed actions
+  * This endpoint receives notification tokens when users add/remove the frame
+  */
   @Post('/farcaster-webhook')
+  @UseGuards(WebhookApiKeyGuard)
   async farcasterWebhook(
     @Body() body: any,
     @Res() res: Response,
