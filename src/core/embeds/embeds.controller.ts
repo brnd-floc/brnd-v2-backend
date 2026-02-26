@@ -7,11 +7,13 @@ import {
   Res,
   HttpStatus,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { EmbedsService } from './services';
 import { hasError } from '../../utils';
+import { AdminGuard, DebugEndpointGuard } from '../../security/guards';
 
 @ApiTags('embeds')
 @Controller('embeds')
@@ -219,6 +221,7 @@ export class EmbedsController {
    * Debug endpoint to test if embeds controller is working
    */
   @Get('/debug/:voteId')
+  @UseGuards(AdminGuard, DebugEndpointGuard)
   async debugVote(
     @Param('voteId') voteId: string,
     @Res() res: Response,

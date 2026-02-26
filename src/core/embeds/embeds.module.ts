@@ -2,6 +2,7 @@
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminGuard, DebugEndpointGuard } from '../../security/guards';
 import { EmbedsController } from './embeds.controller';
 import { EmbedsService, PodiumService } from './services';
 import { UserBrandVotes, User, Brand } from '../../models';
@@ -9,7 +10,7 @@ import { UserBrandVotes, User, Brand } from '../../models';
 @Module({
   imports: [TypeOrmModule.forFeature([UserBrandVotes, User, Brand])],
   controllers: [EmbedsController],
-  providers: [EmbedsService, PodiumService],
+  providers: [EmbedsService, PodiumService, AdminGuard, DebugEndpointGuard],
   exports: [EmbedsService, PodiumService],
 })
 export class EmbedsModule {}

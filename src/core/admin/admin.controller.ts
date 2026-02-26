@@ -27,7 +27,7 @@ import {
 } from './dto';
 import {
   AdminGuard,
-  AuthorizationGuard,
+  DebugEndpointGuard,
   QuickAuthPayload,
 } from '../../security/guards';
 import { Session } from '../../security/decorators';
@@ -38,10 +38,9 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 import { getConfig } from '../../security/config';
 
-const adminFids = [5431, 16098, 8109];
-
 @ApiTags('admin-service')
 @Controller('admin-service')
+@UseGuards(AdminGuard)
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
@@ -58,7 +57,6 @@ export class AdminController {
    * Get all brands for admin management
    */
   @Get('brands')
-  @UseGuards(AuthorizationGuard)
   async getAllBrands(
     @Session() user: QuickAuthPayload,
     @Query('page') page: number = 1,
@@ -69,17 +67,6 @@ export class AdminController {
     console.log(
       `getAllBrands called - user: ${user.sub}, page: ${page}, limit: ${limit}, search: "${search}"`,
     );
-
-    // Check admin permissions
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'getAllBrands',
-        'Admin access required',
-      );
-    }
 
     try {
       console.log('Fetching brands from service...');
@@ -121,17 +108,7 @@ export class AdminController {
     @Body() createBrandDto: CreateBrandDto,
     @Res() res: Response,
   ) {
-    console.log(`createBrand called - user: ${user.sub}`, createBrandDto);
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'createBrand',
-        'Admin access required',
-      );
-    }
+    console.log(`createBrand called - user: ${user.sub}`);
 
     try {
       console.log('Creating new brand...');
@@ -151,12 +128,12 @@ export class AdminController {
       });
     } catch (error) {
       console.error('Error in createBrand:', error);
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'createBrand',
-        error.message,
-      );
+      const statusCode =
+        error instanceof Error &&
+        error.message.includes('Invalid tickerTokenId format')
+          ? HttpStatus.BAD_REQUEST
+          : HttpStatus.INTERNAL_SERVER_ERROR;
+      return hasError(res, statusCode, 'createBrand', error.message);
     }
   }
 
@@ -170,20 +147,7 @@ export class AdminController {
     @Body() updateBrandDto: UpdateBrandDto,
     @Res() res: Response,
   ) {
-    console.log(
-      `updateBrand called - user: ${user.sub}, id: ${id}`,
-      updateBrandDto,
-    );
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'updateBrand',
-        'Admin access required',
-      );
-    }
+    console.log(`updateBrand called - user: ${user.sub}, id: ${id}`);
 
     try {
       console.log(`Updating brand ${id}...`);
@@ -223,12 +187,12 @@ export class AdminController {
       });
     } catch (error) {
       console.error('Error in updateBrand:', error);
-      return hasError(
-        res,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        'updateBrand',
-        error.message,
-      );
+      const statusCode =
+        error instanceof Error &&
+        error.message.includes('Invalid tickerTokenId format')
+          ? HttpStatus.BAD_REQUEST
+          : HttpStatus.INTERNAL_SERVER_ERROR;
+      return hasError(res, statusCode, 'updateBrand', error.message);
     }
   }
 
@@ -242,16 +206,6 @@ export class AdminController {
     @Res() res: Response,
   ) {
     console.log(`deleteBrand called - user: ${user.sub}, id: ${id}`);
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'deleteBrand',
-        'Admin access required',
-      );
-    }
 
     try {
       console.log(`Deleting brand ${id}...`);
@@ -277,16 +231,6 @@ export class AdminController {
   @Get('categories')
   async getCategories(@Session() user: QuickAuthPayload, @Res() res: Response) {
     console.log(`getCategories called - user: ${user.sub}`);
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'getCategories',
-        'Admin access required',
-      );
-    }
 
     try {
       console.log('Fetching categories...');
@@ -317,16 +261,6 @@ export class AdminController {
       `refreshBrandFollowerCount called - user: ${user.sub}, id: ${id}`,
     );
 
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'refreshBrandFollowerCount',
-        'Admin access required',
-      );
-    }
-
     try {
       console.log(`Refreshing follower count for brand ${id}...`);
       const brand = await this.adminService.refreshBrandFollowerCount(id);
@@ -352,21 +286,11 @@ export class AdminController {
   }
 
   @Get('fix-weekly-scores')
-  @UseGuards(AuthorizationGuard)
   async fixWeeklyScores(
-    @Session() user: QuickAuthPayload,
+    @Session() _user: QuickAuthPayload,
     @Res() res: Response,
   ) {
-    // Check admin authorization (your existing pattern)
-    const adminFids = [39278, 16098, 8109];
-    if (!adminFids.includes(user.sub)) {
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'fixWeeklyScores',
-        'Admin access required',
-      );
-    }
+    void _user;
 
     try {
       const result = await this.adminService.fixWeeklyScores();
@@ -421,16 +345,6 @@ export class AdminController {
     console.log(
       `bulkRefreshFollowerCounts called - user: ${user.sub}, brandIds: ${brandIds?.join(', ')}`,
     );
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'bulkRefreshFollowerCounts',
-        'Admin access required',
-      );
-    }
 
     if (!brandIds || !Array.isArray(brandIds) || brandIds.length === 0) {
       return hasError(
@@ -498,26 +412,12 @@ export class AdminController {
    * Validates data first, then uploads metadata to IPFS and returns hash for smart contract
    */
   @Post('brands/prepare-metadata')
-  @UseGuards(AuthorizationGuard)
   async prepareBrandMetadata(
     @Session() user: QuickAuthPayload,
     @Body() prepareMetadataDto: PrepareMetadataDto,
     @Res() res: Response,
   ) {
-    console.log(
-      `prepareBrandMetadata called - user: ${user.sub}`,
-      prepareMetadataDto,
-    );
-
-    if (!adminFids.includes(user.sub)) {
-      console.log(`Access denied for user ${user.sub} - not in admin list`);
-      return hasError(
-        res,
-        HttpStatus.FORBIDDEN,
-        'prepareBrandMetadata',
-        'Admin access required',
-      );
-    }
+    console.log(`prepareBrandMetadata called - user: ${user.sub}`);
 
     try {
       // Step 1: Validate brand data first
@@ -571,18 +471,7 @@ export class AdminController {
    */
   @Get('brands/contract-status')
   async getContractStatus(@Res() res: Response) {
-    logger.log(`getContractStatus called - testing mode (no auth)`);
-
-    // TESTING: Admin check disabled
-    // if (!adminFids.includes(user.sub)) {
-    //   logger.log(`Access denied for user ${user.sub} - not in admin list`);
-    //   return hasError(
-    //     res,
-    //     HttpStatus.FORBIDDEN,
-    //     'getContractStatus',
-    //     'Admin access required',
-    //   );
-    // }
+    logger.log(`getContractStatus called`);
 
     try {
       logger.log('Checking contract sync status...');
@@ -618,7 +507,7 @@ export class AdminController {
   @Get('brands/upload-all-brands-to-contract')
   // UPLOAD BRANDS TO SMART CONTRACT
   async uploadBrandsToContract(@Res() res: Response) {
-    logger.log(`uploadBrandsToContract called - testing mode (no auth)`);
+    logger.log(`uploadBrandsToContract called`);
 
     try {
       logger.log('Starting brand upload to contract...');
@@ -659,20 +548,6 @@ export class AdminController {
 
       // Organize the brands array by their id in ascending order before proceeding
       brands.sort((a, b) => a.id - b.id);
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('IN HERE, THE BRANDS SORTED ARE:', brands);
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log('*************************************************');
-      console.log(
-        '***********************we will return now**************************',
-      );
-      console.log('*************************************************');
 
       // 3. Upload to contract in batches
 
@@ -719,18 +594,7 @@ export class AdminController {
    */
   @Get('brands/upload-preview')
   async previewBrandUpload(@Res() res: Response) {
-    logger.log(`previewBrandUpload called - testing mode (no auth)`);
-
-    // TESTING: Admin check disabled
-    // if (!adminFids.includes(user.sub)) {
-    //   logger.log(`Access denied for user ${user.sub} - not in admin list`);
-    //   return hasError(
-    //     res,
-    //     HttpStatus.FORBIDDEN,
-    //     'previewBrandUpload',
-    //     'Admin access required',
-    //   );
-    // }
+    logger.log(`previewBrandUpload called`);
 
     try {
       logger.log('Generating brand upload preview...');
@@ -792,9 +656,7 @@ export class AdminController {
     @Res() res: Response,
   ) {
     const limit = body.limit || 20; // Default to 20 for testing
-    logger.log(
-      `uploadLimitedBrandsToContract called - limit: ${limit} (no auth)`,
-    );
+    logger.log(`uploadLimitedBrandsToContract called - limit: ${limit}`);
 
     try {
       logger.log(
@@ -888,7 +750,7 @@ export class AdminController {
    */
   @Get('brands/upload-status')
   async getBrandUploadStatus(@Res() res: Response) {
-    logger.log(`getBrandUploadStatus called (no auth)`);
+    logger.log(`getBrandUploadStatus called`);
 
     try {
       const totalBrands =
@@ -924,7 +786,7 @@ export class AdminController {
    */
   @Post('brands/reset-upload-flags')
   async resetUploadFlags(@Res() res: Response) {
-    logger.log(`resetUploadFlags called (no auth)`);
+    logger.log(`resetUploadFlags called`);
 
     try {
       await this.contractUploadService.resetUploadFlags();
@@ -949,9 +811,9 @@ export class AdminController {
   }
 
   @Get('podiums/generate-sample-image')
-  @UseGuards(AdminGuard)
+  @UseGuards(DebugEndpointGuard)
   async generateSampleImage(@Res() res: Response) {
-    logger.log(`generateSampleImage called - testing mode (no auth)`);
+    logger.log(`generateSampleImage called`);
 
     try {
       const result = await this.podiumService.generateSamplePodiumImage();

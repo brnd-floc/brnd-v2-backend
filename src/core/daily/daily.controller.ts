@@ -2,7 +2,7 @@ import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
 import { DailyService } from './daily.service';
-import { IndexerGuard } from '../../security/guards';
+import { DebugEndpointGuard, IndexerGuard } from '../../security/guards';
 import { logger } from '../../main';
 
 @ApiTags('daily-service')
@@ -14,7 +14,7 @@ export class DailyController {
    * Manual trigger for daily reset (protected by IndexerGuard for security)
    */
   @Post('/trigger-reset')
-  @UseGuards(IndexerGuard)
+  @UseGuards(IndexerGuard, DebugEndpointGuard)
   async triggerManualReset() {
     try {
       logger.log('🔧 [DAILY] Manual reset endpoint triggered');
@@ -36,6 +36,7 @@ export class DailyController {
    * Manual trigger for airdrop leaderboard calculation (protected by IndexerGuard for security)
    */
   @Get('/trigger-airdrop-calculation')
+  @UseGuards(IndexerGuard, DebugEndpointGuard)
   async triggerManualAirdropCalculation() {
     try {
       logger.log('🔧 [DAILY] Manual airdrop calculation endpoint triggered');
