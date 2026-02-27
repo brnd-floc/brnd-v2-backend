@@ -142,6 +142,31 @@ export class BrandController {
     return headerValue || 'n/a';
   }
 
+  private extractTransactionHashFromEmbedUrl(embedUrl?: string): string | null {
+    if (!embedUrl) {
+      return null;
+    }
+
+    const podiumToken = '/podium/';
+    const podiumIndex = embedUrl.indexOf(podiumToken);
+    if (podiumIndex === -1) {
+      return null;
+    }
+
+    const rawTxHash = embedUrl
+      .slice(podiumIndex + podiumToken.length)
+      .split('?')[0]
+      .split('#')[0]
+      .replace(/\/+$/, '')
+      .trim();
+
+    return rawTxHash || null;
+  }
+
+  private normalizeTxHash(value?: string | null): string {
+    return value?.trim().toLowerCase() ?? '';
+  }
+
   @Get('/brand/:id')
   async getBrandById(
     @Param('id') id: Brand['id'],
@@ -549,13 +574,12 @@ export class BrandController {
                     );
 
                     if (hasValidBaseUrl && embedUrl.includes('/podium/')) {
-                      // Extract transaction hash from URL (handle query params/fragments)
-                      const txHashFromEmbed = embedUrl
-                        .split('/podium/')[1]
-                        ?.split('?')[0]
-                        ?.split('#')[0]
-                        ?.trim();
-                      if (txHashFromEmbed === expectedTxHash) {
+                      const txHashFromEmbed =
+                        this.extractTransactionHashFromEmbedUrl(embedUrl);
+                      if (
+                        this.normalizeTxHash(txHashFromEmbed) ===
+                        this.normalizeTxHash(expectedTxHash)
+                      ) {
                         foundCast = cast;
                         resolvedCastHash = cast.hash;
                         break;
@@ -629,9 +653,12 @@ export class BrandController {
         const correctEmbed = castData.embeds[correctEmbedIndex] as any;
         const correctEmbedUrl = correctEmbed.url;
         const transactionHashFromQueryParam =
-          correctEmbedUrl.split('/podium/')[1];
+          this.extractTransactionHashFromEmbedUrl(correctEmbedUrl);
 
-        if (vote.transactionHash !== transactionHashFromQueryParam) {
+        if (
+          this.normalizeTxHash(vote.transactionHash) !==
+          this.normalizeTxHash(transactionHashFromQueryParam)
+        ) {
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
