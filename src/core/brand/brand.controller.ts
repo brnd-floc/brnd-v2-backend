@@ -53,6 +53,7 @@ export class BrandController {
     'https://brnd.land',
     'https://www.brnd.land',
     'https://frame.brnd.land',
+    'https://api.brndland.com',
   ];
 
   private static readonly DEFAULT_SHARE_EMBED_URLS_LEGACY = [
@@ -212,7 +213,8 @@ export class BrandController {
 
       const enhancedBrand = {
         ...brandResponse.brand,
-        tokenContractAddress: (brandResponse.brand as any).contractAddress ?? null,
+        tokenContractAddress:
+          (brandResponse.brand as any).contractAddress ?? null,
         tokenTicker: (brandResponse.brand as any).ticker ?? null,
         ...guardianProfile,
         onChain: {
