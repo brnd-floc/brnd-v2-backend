@@ -8,7 +8,7 @@ This document is the canonical reference for hardening-related environment varia
 | Variable | Code Default | Local Recommended | Staging Recommended | Production Recommended | Used By |
 |---|---:|---:|---:|---:|---|
 | `QUICKAUTH_ALLOWED_DOMAINS` | `brnd.land,www.brnd.land,frame.brnd.land` (when env unset) | final + legacy as needed for QA | final + legacy (until cutover complete) | final domains only | `src/core/auth/services/auth.service.ts` |
-| `QUICKAUTH_ALLOWED_DOMAINS_LEGACY` | `miniapp.anky.app,brndland.com,miniapp.brndland.com,api.brnd.land` (non-prod fallback only) | enable during migration tests | enable during migration window | empty/unset (except incident rollback) | `src/core/auth/services/auth.service.ts` |
+| `QUICKAUTH_ALLOWED_DOMAINS_LEGACY` | `miniapp.anky.app,brndland.com,miniapp.brndland.com,api.brndland.com` (non-prod fallback only) | enable during migration tests | enable during migration window | empty/unset (except incident rollback) | `src/core/auth/services/auth.service.ts` |
 | `BRAND_SHARE_EMBED_URLS` | `https://brnd.land,https://www.brnd.land,https://frame.brnd.land` (when env unset) | explicit final list | explicit final list | explicit final list | `src/core/brand/brand.controller.ts` |
 | `BRAND_SHARE_EMBED_URLS_LEGACY` | `https://rebrnd.lat,https://poiesis.anky.app,https://brnd-v2-backend-production.up.railway.app` (non-prod fallback only) | enable only for migration tests | enable only during migration window | empty/unset (except incident rollback) | `src/core/brand/brand.controller.ts` |
 | `WEBHOOK_API_KEY` | none (required for guarded routes) | strong random test secret | strong secret from secret manager | strong rotated secret from secret manager | `src/security/guards/webhook-api-key.guard.ts` |
@@ -39,7 +39,7 @@ This document is the canonical reference for hardening-related environment varia
 | `miniapp.anky.app` | Deprecated (phased) | Client transition window | 2026-03-31 | Backend/API owner |
 | `brndland.com` | Deprecated (phased) | Legacy auth clients | 2026-03-31 | Backend/API owner |
 | `miniapp.brndland.com` | Deprecated (phased) | Legacy miniapp traffic | 2026-03-31 | Backend/API owner |
-| `api.brnd.land` | Temporary allowlisted | Backward compatibility for API base URL | 2026-04-15 | Backend/API owner |
+| `api.brndland.com` | Temporary allowlisted | Backward compatibility for API base URL | 2026-04-15 | Backend/API owner |
 
 Retirement criterion:
 - Remove a legacy domain only after 7 consecutive days with zero fallback verification hits in production logs.
@@ -48,8 +48,8 @@ Retirement criterion:
 
 | Component | Production State | Legacy in Non-Prod | Target Removal Date | Owner |
 |---|---|---|---|---|
-| Auth QuickAuth domains | Final-only by default (`brnd.land`, `www.brnd.land`, `frame.brnd.land`) | Enabled via `QUICKAUTH_ALLOWED_DOMAINS_LEGACY` | 2026-03-31 (except `api.brnd.land`) | Backend/API owner |
-| CORS `PRO` origins | Final-only + `api.brnd.land` temporary | Legacy kept in `LOCAL` for QA | 2026-04-15 (`api.brnd.land` review) | Backend/API owner |
+| Auth QuickAuth domains | Final-only by default (`brnd.land`, `www.brnd.land`, `frame.brnd.land`) | Enabled via `QUICKAUTH_ALLOWED_DOMAINS_LEGACY` | 2026-03-31 (except `api.brndland.com`) | Backend/API owner |
+| CORS `PRO` origins | Final-only + `api.brndland.com` temporary | Legacy kept in `LOCAL` for QA | 2026-04-15 (`api.brndland.com` review) | Backend/API owner |
 | Share embed URL verification | Final-only in `production` defaults | Legacy via `BRAND_SHARE_EMBED_URLS_LEGACY` | 2026-03-31 | Backend/API owner |
 
 ## Hard-Cut Readiness Gate

@@ -15,7 +15,7 @@
 
 ```bash
 npm run cutover:verify-api -- \
-  --api-base=https://api.brnd.land \
+  --api-base=https://api.brndland.com \
   --brand-ids=431,428,1 \
   --strict-category \
   --out=./tmp/cutover-baseline-pre.json
@@ -65,7 +65,7 @@ After backend deployment to target environment, rerun:
 
 ```bash
 npm run cutover:verify-api -- \
-  --api-base=https://api.brnd.land \
+  --api-base=https://api.brndland.com \
   --brand-ids=431,428,1 \
   --strict-category \
   --out=./tmp/cutover-baseline-post-backend.json
@@ -82,7 +82,7 @@ Run frontend production checks from `brnd-v2-frontend`:
 npm run cutover:check-env
 npm run cutover:smoke -- \
   --app-url=https://brnd.land \
-  --api-base=https://api.brnd.land \
+  --api-base=https://api.brndland.com \
   --brand-ids=431,428,1
 ```
 
@@ -102,7 +102,7 @@ Gate:
 - `brnd.land`
 - `www.brnd.land`
 - `frame.brnd.land`
-- `api.brnd.land` (temporary)
+- `api.brndland.com` (temporary)
 
 ### Legacy domains in phased deprecation
 - `miniapp.anky.app`
