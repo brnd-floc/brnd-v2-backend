@@ -390,6 +390,7 @@ export class BrandController {
     },
     @Res() res: Response,
   ): Promise<Response> {
+    console.log('[verifyShare] HIT', { castHash, voteId, transactionHash });
     try {
       if (!voteId) {
         return hasError(
