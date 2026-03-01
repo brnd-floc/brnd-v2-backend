@@ -55,6 +55,7 @@ export class BrandController {
     'https://frame.brnd.land',
     'https://api.brndland.com',
     'https://api.brnd.land',
+    'https://brnd-v2-backend-production.up.railway.app',
   ];
 
   private static readonly DEFAULT_SHARE_EMBED_URLS_LEGACY = [
