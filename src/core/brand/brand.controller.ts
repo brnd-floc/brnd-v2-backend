@@ -647,9 +647,9 @@ export class BrandController {
           const actualEmbedUrls = castData.embeds
             .filter((e) => 'url' in e)
             .map((e: any) => e.url);
-          logger.warn(
-            `[verifyShare] embed URL mismatch — allowed: ${JSON.stringify(validEmbedUrls)} — actual: ${JSON.stringify(actualEmbedUrls)}`,
-          );
+          console.log('[verifyShare] embed URL mismatch');
+          console.log('allowed:', validEmbedUrls);
+          console.log('actual:', actualEmbedUrls);
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
