@@ -179,7 +179,7 @@ describe('AuthService', () => {
       'miniapp.anky.app',
       'brndland.com',
       'miniapp.brndland.com',
-      'api.brnd.land',
+      'api.brndland.com',
     ]);
     expect((logger.warn as jest.Mock).mock.calls.length).toBe(0);
   });

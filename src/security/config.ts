@@ -172,7 +172,7 @@ const domains: Domains = {
     'http://127.0.0.1:5173',
     'http://localhost:5173',
     'https://miniapp.brndland.com',
-    'https://api.brnd.land',
+    'https://api.brndland.com',
     'https://miniapp.anky.app',
     'https://brnd.lat',
     'https://rebrnd.lat',
@@ -183,7 +183,7 @@ const domains: Domains = {
     'https://brnd.land',
     'https://www.brnd.land',
     'https://frame.brnd.land',
-    'https://api.brnd.land',
+    'https://api.brndland.com',
   ],
 };
 
