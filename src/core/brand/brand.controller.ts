@@ -390,7 +390,6 @@ export class BrandController {
     },
     @Res() res: Response,
   ): Promise<Response> {
-    console.log('[verifyShare] HIT', { castHash, voteId, transactionHash });
     try {
       if (!voteId) {
         return hasError(
@@ -645,12 +644,6 @@ export class BrandController {
         });
 
         if (correctEmbedIndex === -1) {
-          const actualEmbedUrls = castData.embeds
-            .filter((e) => 'url' in e)
-            .map((e: any) => e.url);
-          console.log('[verifyShare] embed URL mismatch');
-          console.log('allowed:', validEmbedUrls);
-          console.log('actual:', actualEmbedUrls);
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
