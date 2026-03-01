@@ -644,6 +644,12 @@ export class BrandController {
         });
 
         if (correctEmbedIndex === -1) {
+          const actualEmbedUrls = castData.embeds
+            .filter((e) => 'url' in e)
+            .map((e: any) => e.url);
+          logger.warn(
+            `[verifyShare] embed URL mismatch — allowed: ${JSON.stringify(validEmbedUrls)} — actual: ${JSON.stringify(actualEmbedUrls)}`,
+          );
           return hasError(
             res,
             HttpStatus.BAD_REQUEST,
