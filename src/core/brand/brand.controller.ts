@@ -53,7 +53,7 @@ export class BrandController {
     'https://brnd.land',
     'https://www.brnd.land',
     'https://frame.brnd.land',
-    'https://api.brndland.com',
+    'https://api.brnd.land',
   ];
 
   private static readonly DEFAULT_SHARE_EMBED_URLS_LEGACY = [

@@ -56,7 +56,7 @@ function parseArgs(args: string[]): Options {
   const arg = (name: string) => args.find((v) => v.startsWith(`${name}=`));
   const has = (name: string) => args.includes(name);
 
-  const apiBase = (arg('--api-base')?.split('=')[1] || process.env.CUTOVER_API_BASE || 'https://api.brndland.com').replace(/\/$/, '');
+  const apiBase = (arg('--api-base')?.split('=')[1] || process.env.CUTOVER_API_BASE || 'https://api.brnd.land').replace(/\/$/, '');
   const brandIdsRaw = arg('--brand-ids')?.split('=')[1] || process.env.CUTOVER_BRAND_IDS || '431,428,1';
   const brandIds = brandIdsRaw
     .split(',')
