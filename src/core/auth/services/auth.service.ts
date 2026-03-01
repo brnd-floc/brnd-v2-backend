@@ -32,7 +32,7 @@ export class AuthService implements OnModuleInit {
     'miniapp.anky.app',
     'brndland.com',
     'miniapp.brndland.com',
-    'api.brndland.com',
+    'api.brnd.land',
   ];
 
   constructor() {}

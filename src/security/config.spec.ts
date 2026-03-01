@@ -7,7 +7,7 @@ describe('security domains config', () => {
       'https://brnd.land',
       'https://www.brnd.land',
       'https://frame.brnd.land',
-      'https://api.brndland.com',
+      'https://api.brnd.land',
     ]);
   });
 
