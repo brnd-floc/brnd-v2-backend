@@ -64,8 +64,9 @@ import {
         ...(getConfig().isProduction ? {} : { insecureAuth: true }),
         // Connection pool settings for production
         connectionLimit: 20, // Increased from 10 to handle concurrent operations
-        acquireTimeout: 30000, // Reduced from 60000
-        timeout: 30000, // Reduced from 60000
+        connectTimeout: 30000,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000,
       },
     }),
   ],
