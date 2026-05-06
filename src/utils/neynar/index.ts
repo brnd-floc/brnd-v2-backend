@@ -34,15 +34,15 @@ export default class NeynarService {
    * @returns Cast data from Neynar
    */
   async getCastByHash(castHash: string): Promise<Cast> {
-    const maxRetries = 8;
+    const maxRetries = 3;
     let attempts = 0;
 
     while (attempts < maxRetries) {
       try {
-        // Wait 1 second between attempts, except for first attempt
+        // Wait between attempts, except for first attempt
         if (attempts > 0) {
           await new Promise((resolve) =>
-            setTimeout(resolve, 1000 + attempts * 1000),
+            setTimeout(resolve, 1500 * attempts),
           );
         }
 
@@ -70,7 +70,7 @@ export default class NeynarService {
       }
     }
 
-    throw new Error('Failed to fetch cast after maximum retry attempts');
+    throw new Error('Cast not found on Farcaster after retries');
   }
 
   getTrendingCastInAChannel = async (

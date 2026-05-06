@@ -423,6 +423,18 @@ export class BrandController {
       // Validate castHash format if provided
       const hasValidCastHash = castHash && /^0x[a-fA-F0-9]{40}$/.test(castHash);
 
+      // transactionHash is the canonical lookup key; fall back to voteId for
+      // older clients that only send voteId (which is the transaction hash).
+      const txHashForLookup = (transactionHash || voteId) as string;
+      if (!txHashForLookup) {
+        return hasError(
+          res,
+          HttpStatus.BAD_REQUEST,
+          'verifyShare',
+          'Transaction hash is required',
+        );
+      }
+
       const dbUser = await this.userService.getByFid(user.sub);
       if (!dbUser) {
         return hasError(
@@ -433,20 +445,16 @@ export class BrandController {
         );
       }
 
-      // Try to fetch vote with retries (5 additional attempts with 2 second delays)
-      let vote = await this.brandService.getVoteByTransactionHash(
-        transactionHash as string,
-      );
+      // Try to fetch vote with retries (3 additional attempts with 2 second delays)
+      let vote = await this.brandService.getVoteByTransactionHash(txHashForLookup);
 
       if (!vote) {
-        const maxRetries = 5;
+        const maxRetries = 3;
         const retryDelay = 2000; // 2 seconds
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          vote = await this.brandService.getVoteByTransactionHash(
-            transactionHash as string,
-          );
+          vote = await this.brandService.getVoteByTransactionHash(txHashForLookup);
 
           if (vote) {
             break; // Vote found, exit retry loop
@@ -550,8 +558,8 @@ export class BrandController {
           const voteDay = Math.floor(voteTimestamp / 86400);
 
           let foundCast = null;
-          const maxPollAttempts = 10;
-          const pollInterval = 3000; // 3 seconds
+          const maxPollAttempts = 5;
+          const pollInterval = 2000; // 2 seconds
 
           // Poll for the cast
           for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
@@ -793,20 +801,28 @@ export class BrandController {
           ...responsePayload,
         });
       } catch (neynarError) {
-        if (neynarError.message?.includes('Cast not found')) {
+        const isCastNotFound =
+          neynarError.message?.includes('Cast not found') ||
+          neynarError.message?.includes('not found') ||
+          neynarError.response?.status === 404;
+        if (isCastNotFound) {
           return hasError(
             res,
             HttpStatus.NOT_FOUND,
             'verifyShare',
-            'Cast not found on Farcaster',
+            'Cast not found on Farcaster. Please make sure you shared the post and try again.',
           );
         }
 
+        const errorMessage =
+          typeof neynarError.message === 'string' && neynarError.message
+            ? neynarError.message
+            : 'Failed to verify cast with Farcaster';
         return hasError(
           res,
           HttpStatus.INTERNAL_SERVER_ERROR,
           'verifyShare',
-          'Failed to verify cast with Farcaster',
+          errorMessage,
         );
       }
     } catch (error) {
