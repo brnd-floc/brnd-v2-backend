@@ -145,6 +145,27 @@ export class BrandController {
     return headerValue || 'n/a';
   }
 
+  private rewardClaimUnavailable(res: Response, fid: number, day: number) {
+    logger.error(
+      `event=reward_claim_signature_unavailable fid=${fid} day=${day}`,
+    );
+    return hasError(res, HttpStatus.SERVICE_UNAVAILABLE, 'verifyShare', {
+      code: 'REWARD_CLAIM_UNAVAILABLE',
+      message:
+        'Your vote and share are saved. Reward claiming is temporarily unavailable. Please retry.',
+      retryable: true,
+    });
+  }
+
+  private shareVerificationUnavailable(res: Response) {
+    return hasError(res, HttpStatus.SERVICE_UNAVAILABLE, 'verifyShare', {
+      code: 'SHARE_VERIFICATION_UNAVAILABLE',
+      message:
+        'Your vote is saved. Share verification could not be completed. Please retry.',
+      retryable: true,
+    });
+  }
+
   private extractTransactionHashFromEmbedUrl(embedUrl?: string): string | null {
     if (!embedUrl) {
       return null;
@@ -402,6 +423,18 @@ export class BrandController {
           'Vote ID is required',
         );
       }
+
+      // Recovery links can carry the vote transaction as voteId. Never query
+      // with an undefined hash: TypeORM can otherwise ignore that filter.
+      const voteTransactionHash = transactionHash || voteId;
+      if (!/^0x[a-fA-F0-9]{64}$/.test(voteTransactionHash)) {
+        return hasError(
+          res,
+          HttpStatus.BAD_REQUEST,
+          'verifyShare',
+          'A valid vote transaction hash is required',
+        );
+      }
       logger.log(
         'Verifying share for vote id',
         voteId,
@@ -435,7 +468,7 @@ export class BrandController {
 
       // Try to fetch vote with retries (5 additional attempts with 2 second delays)
       let vote = await this.brandService.getVoteByTransactionHash(
-        transactionHash as string,
+        voteTransactionHash,
       );
 
       if (!vote) {
@@ -445,7 +478,7 @@ export class BrandController {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
           vote = await this.brandService.getVoteByTransactionHash(
-            transactionHash as string,
+            voteTransactionHash,
           );
 
           if (vote) {
@@ -472,6 +505,23 @@ export class BrandController {
         );
       }
 
+      const day =
+        vote.day ?? Math.floor(new Date(vote.date).getTime() / 86400000);
+
+      if (vote.claimedAt) {
+        return hasResponse(res, {
+          verified: true,
+          hasClaimed: true,
+          canClaim: false,
+          pointsAwarded: 0,
+          newTotalPoints: dbUser.points,
+          message: 'Rewards have already been claimed for this vote.',
+          day,
+          castHash: vote.castHash,
+          claimSignature: null,
+        });
+      }
+
       // If vote is already shared, skip verification and just return claim signature
       if (vote.shared) {
         if (!vote.castHash) {
@@ -483,9 +533,19 @@ export class BrandController {
           );
         }
 
-        // Calculate day from vote date (or use stored day if available)
-        const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
-        const day = vote.day || Math.floor(voteTimestamp / 86400);
+        // A previous attempt may have saved the verified cast before updating
+        // reward eligibility. Resume that transition without awarding points
+        // again or requiring another cast.
+        if (!vote.shareVerified) {
+          const verified = await this.rewardService.verifyShareForReward(
+            dbUser.fid,
+            day,
+            vote.castHash,
+          );
+          if (!verified) {
+            return this.shareVerificationUnavailable(res);
+          }
+        }
 
         // Generate claim signature if recipient address is provided
         let claimSignature = null;
@@ -498,7 +558,7 @@ export class BrandController {
               vote.castHash,
             );
           } catch (claimError) {
-            // Do nothing, skip claim sig on error
+            return this.rewardClaimUnavailable(res, dbUser.fid, day);
           }
         }
 
@@ -543,11 +603,8 @@ export class BrandController {
 
           const expectedTxHash = vote.transactionHash;
 
-          // Calculate the vote's day (BRND world day)
-          const voteTimestamp = Math.floor(
-            new Date(vote.date).getTime() / 1000,
-          );
-          const voteDay = Math.floor(voteTimestamp / 86400);
+          // Use the indexed vote day when available, including during recovery.
+          const voteDay = day;
 
           let foundCast = null;
           const maxPollAttempts = 10;
@@ -701,14 +758,14 @@ export class BrandController {
 
         const updatedUser = await this.userService.addPoints(dbUser.id, 3);
 
-        const voteTimestamp = Math.floor(new Date(vote.date).getTime() / 1000);
-        const day = Math.floor(voteTimestamp / 86400);
-
-        await this.rewardService.verifyShareForReward(
+        const shareVerified = await this.rewardService.verifyShareForReward(
           dbUser.fid,
           day,
           resolvedCastHash,
         );
+        if (!shareVerified) {
+          return this.shareVerificationUnavailable(res);
+        }
 
         let claimSignature = null;
         if (recipientAddress) {
@@ -720,7 +777,7 @@ export class BrandController {
               resolvedCastHash,
             );
           } catch (claimError) {
-            // Do nothing, skip claim sig on error
+            return this.rewardClaimUnavailable(res, dbUser.fid, day);
           }
         }
         // Read brndPowerLevel from contract (source of truth)

@@ -178,10 +178,15 @@ export class RewardService {
           deadline,
         );
 
-      // Update the vote with signature info
-      vote.signatureGeneratedAt = new Date();
-      vote.nonce = nonce;
-      await this.userBrandVotesRepository.save(vote);
+      // Persist only signature fields. A claim may have been indexed while
+      // signing; saving the earlier vote snapshot could erase that claim.
+      const signatureUpdate = await this.userBrandVotesRepository.update(
+        { transactionHash: vote.transactionHash },
+        { signatureGeneratedAt: new Date(), nonce },
+      );
+      if (signatureUpdate.affected !== 1) {
+        throw new Error('Failed to persist reward claim signature');
+      }
 
       return {
         signature,
@@ -333,13 +338,20 @@ export class RewardService {
         return false; // Vote doesn't exist
       }
 
-      vote.shareVerified = true;
-      vote.shareVerifiedAt = new Date();
-      if (castHash) {
-        vote.castHash = castHash;
+      // Recovery can race with another successful claim. Keep the indexer's
+      // claim fields intact instead of saving a stale copy of the whole vote.
+      const shareUpdate = await this.userBrandVotesRepository.update(
+        { transactionHash: vote.transactionHash },
+        {
+          shareVerified: true,
+          shareVerifiedAt: new Date(),
+          ...(castHash ? { castHash } : {}),
+        },
+      );
+      if (shareUpdate.affected !== 1) {
+        logger.warn(`Failed to persist share for FID: ${fid}, Day: ${day}`);
+        return false;
       }
-
-      await this.userBrandVotesRepository.save(vote);
       logger.log(`✅ [REWARD] Share verified for FID: ${fid}, Day: ${day}`);
       return true;
     } catch (error) {
