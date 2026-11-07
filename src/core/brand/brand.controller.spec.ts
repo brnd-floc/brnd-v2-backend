@@ -119,7 +119,7 @@ describe('BrandController no-op compatibility and embed domain config', () => {
     );
   });
 
-  it('uses final share embed defaults in production', () => {
+  it('keeps production podium API origins in the share embed defaults', () => {
     process.env.NODE_ENV = 'production';
 
     const urls = (controller as any).getVoteShareEmbedBaseUrls();
@@ -128,6 +128,9 @@ describe('BrandController no-op compatibility and embed domain config', () => {
       'https://brnd.land',
       'https://www.brnd.land',
       'https://frame.brnd.land',
+      'https://api.brndland.com',
+      'https://api.brnd.land',
+      'https://brnd-v2-backend-production.up.railway.app',
     ]);
   });
 
@@ -140,9 +143,11 @@ describe('BrandController no-op compatibility and embed domain config', () => {
       'https://brnd.land',
       'https://www.brnd.land',
       'https://frame.brnd.land',
+      'https://api.brndland.com',
+      'https://api.brnd.land',
+      'https://brnd-v2-backend-production.up.railway.app',
       'https://rebrnd.lat',
       'https://poiesis.anky.app',
-      'https://brnd-v2-backend-production.up.railway.app',
     ]);
     expect((logger.warn as jest.Mock).mock.calls.length).toBe(0);
   });

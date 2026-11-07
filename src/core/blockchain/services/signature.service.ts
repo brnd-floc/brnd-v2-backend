@@ -271,9 +271,10 @@ export class SignatureService {
 
     const account = privateKeyToAccount(privateKey);
 
+    const config = getConfig();
     const publicClient = createPublicClient({
       chain: base,
-      transport: http(),
+      transport: http(config.blockchain.baseRpcUrl),
     });
 
     const rewardNoncesAbi = [
@@ -292,8 +293,6 @@ export class SignatureService {
       functionName: 'rewardNonces',
       args: [recipient as `0x${string}`],
     } as any);
-
-    const config = getConfig();
 
     const walletClient = createWalletClient({
       account,
