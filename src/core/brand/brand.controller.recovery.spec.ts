@@ -125,6 +125,7 @@ describe('daily reward recovery', () => {
 
     expect(brandService.getVoteByTransactionHash).toHaveBeenCalledWith(
       transactionHash,
+      1,
     );
     expect(rewardService.verifyShareForReward).toHaveBeenCalledWith(
       fid,
@@ -238,6 +239,28 @@ describe('daily reward recovery', () => {
 
     expect(res.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
     expect(brandService.getVoteByTransactionHash).not.toHaveBeenCalled();
+    expect(rewardService.generateClaimSignature).not.toHaveBeenCalled();
+  });
+
+  it('returns a retryable response after one lookup when the vote is not indexed', async () => {
+    brandService.getVoteByTransactionHash.mockResolvedValueOnce(null);
+    const res = response();
+
+    await controller.verifyShare({ sub: fid } as any, body, res as any);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(res.json).toHaveBeenCalledWith({
+      action: 'verifyShare',
+      data: expect.objectContaining({
+        code: 'VOTE_INDEXING_PENDING',
+        retryable: true,
+      }),
+    });
+    expect(brandService.getVoteByTransactionHash).toHaveBeenCalledTimes(1);
+    expect(brandService.getVoteByTransactionHash).toHaveBeenCalledWith(
+      transactionHash,
+      1,
+    );
     expect(rewardService.generateClaimSignature).not.toHaveBeenCalled();
   });
 
