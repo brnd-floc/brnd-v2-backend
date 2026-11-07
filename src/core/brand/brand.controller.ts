@@ -466,34 +466,20 @@ export class BrandController {
         );
       }
 
-      // Try to fetch vote with retries (5 additional attempts with 2 second delays)
-      let vote = await this.brandService.getVoteByTransactionHash(
+      // Let the client retry while the indexer catches up. Waiting here can
+      // outlast the miniapp request and hide the reason verification is pending.
+      const vote = await this.brandService.getVoteByTransactionHash(
         voteTransactionHash,
+        1,
       );
 
       if (!vote) {
-        const maxRetries = 5;
-        const retryDelay = 2000; // 2 seconds
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          vote = await this.brandService.getVoteByTransactionHash(
-            voteTransactionHash,
-          );
-
-          if (vote) {
-            break; // Vote found, exit retry loop
-          }
-        }
-      }
-
-      if (!vote) {
-        return hasError(
-          res,
-          HttpStatus.NOT_FOUND,
-          'verifyShare',
-          'Vote not found',
-        );
+        return hasError(res, HttpStatus.SERVICE_UNAVAILABLE, 'verifyShare', {
+          code: 'VOTE_INDEXING_PENDING',
+          message:
+            'We could not find your vote in the index yet. Please retry verification shortly.',
+          retryable: true,
+        });
       }
 
       if (vote.user.fid !== dbUser.fid) {

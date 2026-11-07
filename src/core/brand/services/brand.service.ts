@@ -44,10 +44,10 @@ export class BrandService {
 
   async getVoteByTransactionHash(
     transactionHash: string,
+    maxAttempts = 5,
   ): Promise<UserBrandVotes | null> {
     let vote: UserBrandVotes | null = null;
     let attempts = 0;
-    const maxAttempts = 5;
 
     while (!vote && attempts < maxAttempts) {
       vote = await this.userBrandVotesRepository.findOne({
