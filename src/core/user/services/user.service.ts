@@ -1,7 +1,7 @@
 // Dependencies
 import { Injectable, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository, In, MoreThan } from 'typeorm';
+import { Between, EntityManager, Repository, In, MoreThan } from 'typeorm';
 
 // Models
 import {
@@ -262,25 +262,27 @@ export class UserService {
    * @param {number} points - The number of points to add.
    * @throws {Error} If the user with the specified ID is not found.
    */
-  async addPoints(userId: User['id'], points: number) {
-    const user = await this.getById(userId);
+  async addPoints(userId: User['id'], points: number, manager?: EntityManager) {
+    const repository = manager?.getRepository(User) ?? this.userRepository;
+    await repository
+      .createQueryBuilder()
+      .update(User)
+      .set({
+        points: () => 'points + :points',
+        totalS2Points: () => 'totalS2Points + :points',
+      })
+      .where({ id: userId })
+      .setParameter('points', points)
+      .execute();
 
+    const user = await repository.findOne({ where: { id: userId } });
     if (!user) {
       throw new Error(`User with ID ${userId} not found.`);
     }
 
-    user.points += points;
-    user.totalS2Points += points;
-    const updatedUser = await this.userRepository.save(user);
-
-    // Invalidate leaderboard cache for real-time updates
-    this.invalidateLeaderboardCache();
-
-    console.log(
-      `💰 [UserService] Added ${points} points to user ${userId}, total: ${user.points}, S2: ${user.totalS2Points}`,
-    );
-
-    return updatedUser;
+    // A transaction's caller invalidates the cache after committing.
+    if (!manager) this.invalidateLeaderboardCache();
+    return user;
   }
 
   /**

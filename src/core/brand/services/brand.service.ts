@@ -1264,24 +1264,22 @@ export class BrandService {
   async markVoteAsShared(
     transactionHash: string,
     castHash: string,
-  ): Promise<UserBrandVotes> {
-    try {
-      const vote = await this.userBrandVotesRepository.findOne({
-        where: { transactionHash },
-      });
+    userId: number,
+  ) {
+    const updatedUser = await this.userBrandVotesRepository.manager.transaction(
+      async (manager) => {
+        const result = await manager.getRepository(UserBrandVotes).update(
+          { transactionHash, shared: false },
+          { shared: true, castHash },
+        );
+        if (result.affected !== 1) return null;
 
-      if (!vote) {
-        throw new Error('Vote not found');
-      }
+        return this.userService.addPoints(userId, 3, manager);
+      },
+    );
 
-      vote.shared = true;
-      vote.castHash = castHash;
-
-      return await this.userBrandVotesRepository.save(vote);
-    } catch (error) {
-      console.error('❌ [BrandService] Error marking vote as shared:', error);
-      throw new Error('Failed to update vote sharing status');
-    }
+    if (updatedUser) this.userService.invalidateLeaderboardCache();
+    return updatedUser;
   }
 
   /**

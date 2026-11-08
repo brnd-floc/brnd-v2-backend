@@ -261,7 +261,7 @@ export class IndexerService {
         where: {
           user: { id: user.id },
           day: day,
-          brand1: null, // Placeholder indicator
+          brand1: IsNull(), // Placeholder indicator
           claimTxHash: Not(IsNull()), // Has claim data
         },
         relations: ['user'],
@@ -289,13 +289,6 @@ export class IndexerService {
           shareVerified: placeholderVote.shareVerified,
           shareVerifiedAt: placeholderVote.shareVerifiedAt,
         };
-        // Delete the placeholder since we'll create the real vote with the correct transactionHash
-        await this.userBrandVotesRepository.delete({
-          transactionHash: placeholderVote.transactionHash,
-        });
-        logger.log(
-          `🗑️ [INDEXER] Deleted placeholder vote: ${placeholderVote.transactionHash}`,
-        );
       }
 
       // Then check if user already voted this day (business rule)
@@ -308,6 +301,9 @@ export class IndexerService {
         where: {
           user: { id: user.id },
           date: Between(dayStart, dayEnd),
+          ...(placeholderVote && {
+            transactionHash: Not(placeholderVote.transactionHash),
+          }),
         },
         relations: ['user'],
       });
@@ -358,7 +354,31 @@ export class IndexerService {
         pointsEarned: 3, // Initial 3 points for voting
       });
 
-      await this.userBrandVotesRepository.save(vote);
+      // Commit the vote and its points together so a failed credit can be
+      // retried without the vote's transaction hash suppressing the retry.
+      if (placeholderClaimData) {
+        const contractInfo =
+          await this.blockchainService.getUserInfoFromContractByFid(user.fid);
+        vote.pointsEarned +=
+          (contractInfo?.brndPowerLevel ?? user.brndPowerLevel) * 3;
+      }
+
+      await this.userBrandVotesRepository.manager.transaction(
+        async (manager) => {
+          const votes = manager.getRepository(UserBrandVotes);
+          if (placeholderVote) {
+            await votes.delete({
+              transactionHash: placeholderVote.transactionHash,
+            });
+          }
+          await votes.insert(vote);
+          await this.userService.addPoints(user.id, vote.pointsEarned, manager);
+        },
+      );
+      this.userService.invalidateLeaderboardCache();
+      logger.log(
+        `✅ [INDEXER] Saved vote and leaderboard points: ${voteData.id}`,
+      );
 
       // Update any previous votes with the same brand combination to no longer be the last
       // This enables frontend to know if a user can mint (only last voter can mint)
@@ -422,44 +442,6 @@ export class IndexerService {
         logger.log(
           `✅ [INDEXER] Copied collectible data to new vote for already-minted combination [${voteData.brandIds.join(', ')}]`,
         );
-      }
-
-      if (placeholderClaimData) {
-        logger.log(
-          `✅ [INDEXER] Saved vote and merged placeholder claim data: ${voteData.id}`,
-        );
-        // Add level-based leaderboard points for the claim (since we merged claim data)
-        // User gets brndPowerLevel * 3 additional points
-        // Read brndPowerLevel from contract (source of truth)
-
-        let contractLevel = user.brndPowerLevel;
-        try {
-          const contractInfo =
-            await this.blockchainService.getUserInfoFromContractByFid(user.fid);
-          contractLevel = contractInfo?.brndPowerLevel ?? user.brndPowerLevel;
-        } catch (err) {
-          logger.warn(
-            `⚠️ [INDEXER] Could not read contract level for FID ${user.fid}, using DB level ${user.brndPowerLevel}`,
-          );
-        }
-
-        const claimLeaderboardPoints = contractLevel * 3;
-        await this.userService.addPoints(user.id, claimLeaderboardPoints);
-        logger.log(
-          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${user.id} (contract level ${contractLevel})`,
-        );
-
-        // Update the vote's pointsEarned to include claim points
-        const totalPointsEarned = 3 + claimLeaderboardPoints;
-        await this.userBrandVotesRepository.update(
-          { transactionHash: voteData.transactionHash },
-          { pointsEarned: totalPointsEarned },
-        );
-        logger.log(
-          `✅ [INDEXER] Updated vote pointsEarned to ${totalPointsEarned} for tx ${voteData.transactionHash}`,
-        );
-      } else {
-        logger.log(`✅ [INDEXER] Saved vote: ${voteData.id}`);
       }
 
       // Update brand scores (60%/30%/10% of BRND paid for 1st/2nd/3rd place)
@@ -579,10 +561,6 @@ export class IndexerService {
       // Then update calculated fields (which depend on the updated totalVotes)
       await this.userService.updateUserCalculatedFields(user.id);
 
-      // Calculate leaderboard points for voting (flat 3 points regardless of level)
-      // Level-based points are awarded separately when reward is claimed
-      const leaderboardPoints = 3;
-      await this.userService.addPoints(user.id, leaderboardPoints);
       // let cloudinaryUrl: string | null = null;
       // try {
       //   cloudinaryUrl = await this.podiumService.generatePodiumImageFromTxHash(
@@ -675,6 +653,8 @@ export class IndexerService {
       let userVote = await this.userBrandVotesRepository.findOne({
         where: {
           castHash: claimData.castHash,
+          user: { fid: claimData.fid },
+          day: dayNumber,
         },
         relations: ['user'],
       });
@@ -718,30 +698,42 @@ export class IndexerService {
         // Calculate total points earned: 3 (voting) + claim points
         const totalPointsEarned = 3 + claimLeaderboardPoints;
 
-        await this.userBrandVotesRepository.update(
-          { transactionHash: userVote.transactionHash },
-          {
-            claimedAt: claimDate,
-            claimTxHash: claimData.transactionHash,
-            castHash: claimData.castHash,
-            shared: true,
-            shareVerified: true,
-            shareVerifiedAt: claimDate,
-            pointsEarned: totalPointsEarned,
-          },
-        );
+        const credited =
+          await this.userBrandVotesRepository.manager.transaction(
+            async (manager) => {
+              const result = await manager.getRepository(UserBrandVotes).update(
+                {
+                  transactionHash: userVote.transactionHash,
+                  claimedAt: IsNull(),
+                  claimTxHash: IsNull(),
+                },
+                {
+                  claimedAt: claimDate,
+                  claimTxHash: claimData.transactionHash,
+                  castHash: claimData.castHash,
+                  shared: true,
+                  shareVerified: true,
+                  shareVerifiedAt: claimDate,
+                  pointsEarned: totalPointsEarned,
+                },
+              );
 
-        logger.log(
-          `✅ [INDEXER] Updated UserBrandVotes: ${userVote.transactionHash} with pointsEarned: ${totalPointsEarned}`,
-        );
+              if (result.affected !== 1) return false;
+              await this.userService.addPoints(
+                userVote.user.id,
+                claimLeaderboardPoints,
+                manager,
+              );
+              return true;
+            },
+          );
 
-        await this.userService.addPoints(
-          userVote.user.id,
-          claimLeaderboardPoints,
-        );
-        logger.log(
-          `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${userVote.user.id} (contract level ${contractLevel})`,
-        );
+        if (credited) {
+          this.userService.invalidateLeaderboardCache();
+          logger.log(
+            `✅ [INDEXER] Added ${claimLeaderboardPoints} claim points to user ${userVote.user.id} (contract level ${contractLevel})`,
+          );
+        }
       } else {
         // Edge case: Claim event came before vote event
         // Create a placeholder vote record that will be updated when the vote event arrives
