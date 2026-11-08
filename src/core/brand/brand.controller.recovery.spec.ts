@@ -72,7 +72,7 @@ describe('daily reward recovery', () => {
         async (_tx: string, hash: string) => {
           vote.shared = true;
           vote.castHash = hash;
-          return vote;
+          return { id: 1, fid, points: 53, brndPowerLevel: 1 };
         },
       ),
     };
@@ -175,7 +175,11 @@ describe('daily reward recovery', () => {
       recipientAddress,
       castHash,
     );
-    expect(userService.addPoints).toHaveBeenCalledTimes(1);
+    expect(brandService.markVoteAsShared).toHaveBeenCalledWith(
+      transactionHash,
+      castHash,
+      1,
+    );
     expect(brandService.markVoteAsShared).toHaveBeenCalledTimes(1);
     expect(neynar.getCastByHash).toHaveBeenCalledTimes(1);
   });
@@ -206,7 +210,11 @@ describe('daily reward recovery', () => {
     expect(retry.status).toHaveBeenCalledWith(HttpStatus.OK);
     expect(rewardService.generateClaimSignature).toHaveBeenCalledTimes(2);
     expect(rewardService.verifyShareForReward).toHaveBeenCalledTimes(1);
-    expect(userService.addPoints).toHaveBeenCalledTimes(1);
+    expect(brandService.markVoteAsShared).toHaveBeenCalledWith(
+      transactionHash,
+      castHash,
+      1,
+    );
     expect(neynar.getCastByHash).toHaveBeenCalledTimes(1);
     expect(vote.transactionHash).toBe(transactionHash);
   });

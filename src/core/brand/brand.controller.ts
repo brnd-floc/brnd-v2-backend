@@ -658,28 +658,12 @@ export class BrandController {
           );
         }
 
-        await this.brandService.markVoteAsShared(
+        const updatedUser = await this.brandService.markVoteAsShared(
           vote.transactionHash,
           resolvedCastHash,
+          dbUser.id,
         );
-
-        // Triple-check: Re-fetch vote to verify it was marked as shared
-        // This prevents race conditions where two requests might process simultaneously
-        const updatedVote = await this.brandService.getVoteByTransactionHash(
-          vote.transactionHash,
-        );
-
-        // If vote is not shared after our update, something went wrong
-        if (!updatedVote?.shared) {
-          return hasError(
-            res,
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            'verifyShare',
-            'Failed to mark vote as shared',
-          );
-        }
-
-        const updatedUser = await this.userService.addPoints(dbUser.id, 3);
+        if (!updatedUser) return this.shareVerificationUnavailable(res);
 
         const shareVerified = await this.rewardService.verifyShareForReward(
           dbUser.fid,

@@ -376,43 +376,35 @@ export class IndexerSyncService {
             const brndPaid = Number(costBigInt / BigInt(10 ** 18));
             const rewardAmount = (costBigInt * 10n).toString();
 
-            // Insert the vote using raw query for simplicity with foreign keys
-            await this.userBrandVotesRepository.query(
-              `INSERT INTO user_brand_votes
-               (transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, day,
-                brndPaidWhenCreatingPodium, rewardAmount, shared, shareVerified, pointsEarned)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                txHash,
-                indexerVote.id,
-                userId,
-                brandIdsArray[0],
-                brandIdsArray[1],
-                brandIdsArray[2],
-                voteDate,
-                day,
-                brndPaid,
-                rewardAmount,
-                false,
-                false,
-                3, // Initial 3 points for voting
-              ],
+            await this.userBrandVotesRepository.manager.transaction(
+              async (manager) => {
+                await manager.query(
+                  `INSERT INTO user_brand_votes
+                   (transactionHash, id, userId, brand1Id, brand2Id, brand3Id, date, day,
+                    brndPaidWhenCreatingPodium, rewardAmount, shared, shareVerified, pointsEarned)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    txHash,
+                    indexerVote.id,
+                    userId,
+                    brandIdsArray[0],
+                    brandIdsArray[1],
+                    brandIdsArray[2],
+                    voteDate,
+                    day,
+                    brndPaid,
+                    rewardAmount,
+                    false,
+                    false,
+                    3, // Initial 3 points for voting
+                  ],
+                );
+                await this.userService.addPoints(userId, 3, manager);
+              },
             );
-
+            this.userService.invalidateLeaderboardCache();
             stats.votesInserted++;
-            existingTxSet.add(txHash); // Prevent duplicate inserts in same run
-
-            // Add 3 points for the vote to user's points and totalS2Points
-            try {
-              await this.userService.addPoints(userId, 3);
-              this.logger.debug(
-                `Added 3 points for synced vote to user ${userId}`,
-              );
-            } catch (pointsError) {
-              this.logger.warn(
-                `Failed to add points for vote ${txHash}: ${pointsError}`,
-              );
-            }
+            existingTxSet.add(txHash);
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
