@@ -143,7 +143,10 @@ describe('SignatureService.generateRewardClaimSignature', () => {
       chain: base,
       transport: { url: rpcUrl },
     });
-    expect(http).toHaveBeenCalledWith(rpcUrl);
+    expect(http).toHaveBeenCalledWith(rpcUrl, {
+      timeout: 3000,
+      retryCount: 0,
+    });
     expect(readContract).toHaveBeenCalledWith(
       expect.objectContaining({
         address: contractAddress,

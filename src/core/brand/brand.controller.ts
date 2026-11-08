@@ -1,4 +1,5 @@
 // Dependencies
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   Body,
   Controller,
@@ -576,98 +577,36 @@ export class BrandController {
 
       // Vote is not shared yet, proceed with full verification
       try {
-        const neynar = new NeynarService();
-        let resolvedCastHash = castHash;
-        let castData;
+        const neynar = new NeynarService(3000);
+        const validEmbedUrls = this.getVoteShareEmbedBaseUrls();
 
-        // If castHash is provided and valid, fetch cast directly
-        // Otherwise, poll for the cast
-        if (hasValidCastHash) {
-          castData = await neynar.getCastByHash(castHash);
-        } else {
-          const validEmbedUrls = this.getVoteShareEmbedBaseUrls();
+        const castData = hasValidCastHash
+          ? await neynar.getCastByHash(castHash, 1)
+          : (await neynar.getUserCasts(user.sub, 10, false)).find((cast) => {
+              const castDay = Math.floor(Date.parse(cast.timestamp) / 86400000);
+              if (castDay !== day) return false;
 
-          const expectedTxHash = vote.transactionHash;
+              return cast.embeds.some((embed) => {
+                if (!('url' in embed)) return false;
 
-          // Use the indexed vote day when available, including during recovery.
-          const voteDay = day;
-
-          let foundCast = null;
-          const maxPollAttempts = 10;
-          const pollInterval = 3000; // 3 seconds
-
-          // Poll for the cast
-          for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-            try {
-              const casts = await neynar.getUserCasts(user.sub, 10, false);
-
-              for (const cast of casts) {
-                // Check if cast is from the same BRND world day as the vote
-                // Cast timestamp is in ISO format (e.g., "2025-12-22T14:58:08.000Z")
-                const castTimestampSeconds = Math.floor(
-                  new Date(cast.timestamp).getTime() / 1000,
+                const embedHash = this.extractTransactionHashFromEmbedUrl(
+                  embed.url,
                 );
-                const castDay = Math.floor(castTimestampSeconds / 86400);
-
-                if (castDay !== voteDay) {
-                  continue; // Cast is from a different day
-                }
-
-                // Check if cast has the correct embed URL with the transaction hash
-                for (const embed of cast.embeds) {
-                  if ('url' in embed) {
-                    const embedUrl = embed.url as string;
-                    const hasValidBaseUrl = validEmbedUrls.some((baseUrl) =>
-                      embedUrl.includes(baseUrl),
-                    );
-
-                    if (hasValidBaseUrl && embedUrl.includes('/podium/')) {
-                      const txHashFromEmbed =
-                        this.extractTransactionHashFromEmbedUrl(embedUrl);
-                      if (
-                        this.normalizeTxHash(txHashFromEmbed) ===
-                        this.normalizeTxHash(expectedTxHash)
-                      ) {
-                        foundCast = cast;
-                        resolvedCastHash = cast.hash;
-                        break;
-                      }
-                    }
-                  }
-                }
-
-                if (foundCast) {
-                  break;
-                }
-              }
-
-              if (foundCast) {
-                break;
-              }
-
-              // Wait before next poll attempt
-              if (attempt < maxPollAttempts - 1) {
-                await new Promise((resolve) =>
-                  setTimeout(resolve, pollInterval),
+                return (
+                  validEmbedUrls.some((baseUrl) =>
+                    embed.url.includes(baseUrl),
+                  ) &&
+                  this.normalizeTxHash(embedHash) ===
+                    this.normalizeTxHash(vote.transactionHash)
                 );
-              }
-            } catch (pollError) {
-              logger.error('Error polling for cast:', pollError);
-              // Continue to next attempt
-            }
-          }
+              });
+            });
 
-          if (!foundCast) {
-            return hasError(
-              res,
-              HttpStatus.NOT_FOUND,
-              'verifyShare',
-              'Could not find cast with the expected embed URL and transaction hash',
-            );
-          }
-
-          castData = foundCast;
+        if (!castData) {
+          return this.shareVerificationUnavailable(res);
         }
+
+        const resolvedCastHash = castData.hash || castHash;
 
         if (castData.author.fid !== user.sub) {
           return hasError(
@@ -677,8 +616,6 @@ export class BrandController {
             'Cast was not posted by the authenticated user',
           );
         }
-
-        const validEmbedUrls = this.getVoteShareEmbedBaseUrls();
 
         const correctEmbedIndex = castData.embeds.findIndex((embed) => {
           if ('url' in embed) {
@@ -769,10 +706,10 @@ export class BrandController {
         // Read brndPowerLevel from contract (source of truth)
         let contractLevel = updatedUser.brndPowerLevel;
         try {
-          const contractInfo =
-            await this.blockchainService.getUserInfoFromContractByFid(
-              dbUser.fid,
-            );
+          const contractInfo = await Promise.race([
+            this.blockchainService.getUserInfoFromContractByFid(dbUser.fid),
+            sleep(1000, null, { ref: false }),
+          ]);
           contractLevel =
             contractInfo?.brndPowerLevel ?? updatedUser.brndPowerLevel;
         } catch (err) {
@@ -807,8 +744,9 @@ export class BrandController {
           const config = getConfig();
           if (config.neynar.apiKey && config.neynar.signerUuid) {
             const replyText = `Thank you for voting @${castData.author.username}. Your vote has been verified. You earned ${pointsForVote} points and now have a total of ${updatedUser.points} points.\n\nYou can now claim ${vote.brndPaidWhenCreatingPodium * 10} $BRND on the miniapp.`;
-            await fetch('https://api.neynar.com/v2/farcaster/cast', {
+            void fetch('https://api.neynar.com/v2/farcaster/cast', {
               method: 'POST',
+              signal: AbortSignal.timeout(5000),
               headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': config.neynar.apiKey,
@@ -826,7 +764,7 @@ export class BrandController {
 
                 text: replyText,
               }),
-            });
+            }).catch(() => undefined);
           }
         } catch (replyError) {
           // Do nothing if reply failed
@@ -836,21 +774,10 @@ export class BrandController {
           ...responsePayload,
         });
       } catch (neynarError) {
-        if (neynarError.message?.includes('Cast not found')) {
-          return hasError(
-            res,
-            HttpStatus.NOT_FOUND,
-            'verifyShare',
-            'Cast not found on Farcaster',
-          );
-        }
-
-        return hasError(
-          res,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-          'verifyShare',
-          'Failed to verify cast with Farcaster',
+        logger.warn(
+          `Share verification could not complete: ${neynarError instanceof Error ? neynarError.message : 'unknown error'}`,
         );
+        return this.shareVerificationUnavailable(res);
       }
     } catch (error) {
       return hasError(

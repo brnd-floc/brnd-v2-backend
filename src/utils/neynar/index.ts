@@ -11,12 +11,13 @@ import {
 export default class NeynarService {
   private client: NeynarAPIClient;
 
-  constructor() {
+  constructor(timeout?: number) {
     const appConfig = getConfig();
 
     const config = new Configuration({
       apiKey: appConfig.neynar.apiKey,
       baseOptions: {
+        timeout,
         headers: {
           'x-neynar-experimental': true,
         },
@@ -28,16 +29,15 @@ export default class NeynarService {
 
   /**
    * Retrieves a cast by its hash from Neynar API.
-   * If the cast is not found initially, retries up to 3 times with 1 second delay between attempts.
+   * A caller can limit attempts when it exposes its own retry action.
    *
    * @param castHash - The cast hash (with 0x prefix)
    * @returns Cast data from Neynar
    */
-  async getCastByHash(castHash: string): Promise<Cast> {
-    const maxRetries = 8;
+  async getCastByHash(castHash: string, maxAttempts = 8): Promise<Cast> {
     let attempts = 0;
 
-    while (attempts < maxRetries) {
+    while (attempts < maxAttempts) {
       try {
         // Wait 1 second between attempts, except for first attempt
         if (attempts > 0) {
@@ -61,7 +61,7 @@ export default class NeynarService {
           error.message?.includes('NotFound');
 
         // If cast not found and we haven't exhausted retries, continue to next attempt
-        if (isNotFound && attempts < maxRetries) {
+        if (isNotFound && attempts < maxAttempts) {
           continue;
         }
 
