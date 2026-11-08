@@ -97,6 +97,7 @@ describe('daily reward recovery', () => {
       generateClaimSignature: (jest.fn() as any).mockResolvedValue(signature),
     };
     neynar = {
+      getUserCasts: (jest.fn() as any).mockResolvedValue([]),
       getCastByHash: (jest.fn() as any).mockResolvedValue({
         hash: castHash,
         author: { fid },
@@ -272,6 +273,35 @@ describe('daily reward recovery', () => {
     expect(res.status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN);
     expect(rewardService.verifyShareForReward).not.toHaveBeenCalled();
     expect(rewardService.generateClaimSignature).not.toHaveBeenCalled();
+  });
+
+  it('checks recent casts once when no cast hash is available', async () => {
+    vote.shared = false;
+    vote.castHash = null;
+    const res = response();
+
+    await controller.verifyShare(
+      { sub: fid } as any,
+      { ...body, castHash: '' },
+      res as any,
+    );
+
+    expect(neynar.getUserCasts).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(brandService.markVoteAsShared).not.toHaveBeenCalled();
+  });
+
+  it('makes a missing cast retryable without waiting for Neynar to index it', async () => {
+    vote.shared = false;
+    vote.castHash = null;
+    neynar.getCastByHash.mockRejectedValueOnce(new Error('Cast not found'));
+    const res = response();
+
+    await controller.verifyShare({ sub: fid } as any, body, res as any);
+
+    expect(neynar.getCastByHash).toHaveBeenCalledWith(castHash, 1);
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(brandService.markVoteAsShared).not.toHaveBeenCalled();
   });
 
   it('still verifies the cast author before saving a new share', async () => {

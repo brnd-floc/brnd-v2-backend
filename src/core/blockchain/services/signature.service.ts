@@ -274,7 +274,10 @@ export class SignatureService {
     const config = getConfig();
     const publicClient = createPublicClient({
       chain: base,
-      transport: http(config.blockchain.baseRpcUrl),
+      transport: http(config.blockchain.baseRpcUrl, {
+        timeout: 3000,
+        retryCount: 0,
+      }),
     });
 
     const rewardNoncesAbi = [
